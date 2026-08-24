@@ -75,12 +75,14 @@ const read = async (subdir, filename) => {
 const output = {};
 
 const winX64 = await read('latest-yml-x86_64-pc-windows-msvc', 'latest.yml');
-const winArm64 = await read('latest-yml-aarch64-pc-windows-msvc', 'latest.yml');
-if (!winX64 || !winArm64) {
-  throw new Error('Both x64 and arm64 Windows update manifests are required');
+if (!winX64) {
+  throw new Error('x64 Windows update manifest is required');
 }
 output['latest.yml'] = serialize(winX64);
-output['latest-arm64.yml'] = serialize(winArm64);
+const winArm64 = await read('latest-yml-aarch64-pc-windows-msvc', 'latest.yml');
+if (winArm64) {
+  output['latest-arm64.yml'] = serialize(winArm64);
+}
 
 const macX64 = await read('latest-yml-x86_64-apple-darwin', 'latest-mac.yml');
 const macArm64 = await read('latest-yml-aarch64-apple-darwin', 'latest-mac.yml');

@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [1.20.100] - 2026-08-24
+
+- **Fork release:** first Scartiris fork build, based on upstream v1.20.0.
+- **i18n/zh-CN:** complete Chinese translations for plugins and settings (92 strings), now built into the app instead of patching installed files.
+- **Updater feed:** desktop auto-update now points at the `Scartiris/openchamber` GitHub releases.
+- **CI:** the release pipeline builds Windows x64 only.
+
 ## [1.20.0] - 2026-08-23
 
 - **Session: /btw side questions.** Type `/btw` followed by your question to ask something off-topic in a temporary session forked from the current conversation, so it inherits the full context but leaves the chat itself untouched. The answer streams into a panel above the composer, which talks to that session while the panel is open; you can collapse it to a slim header bar, keep it as a full session, or discard it. The temporary session stays out of the sidebar and session lists until you keep it (thanks to @jaygupta17).
