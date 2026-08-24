@@ -4,9 +4,47 @@
 - Fork：https://github.com/Scartiris/openchamber
 - 分支约定：
   - `main` = 镜像上游，不放任何定制
-  - `custom` = 全部定制（当前：zh-CN 汉化 92 处）
+  - `custom` = 全部定制（zh-CN 汉化、Windows-only 发布流水线、更新源指向 fork）
 
-## 日常升级流程
+## 桌面端更新通道
+
+- Windows 客户端自动更新源 = `Scartiris/openchamber` 的 Releases（改于 `packages/electron/updater-feed.mjs`）
+- 两台 PC（赤峰家里 / 单位）装过 fork 包后即永久走此通道
+- **版本号策略**：patch 位从 100 起步（v1.20.100 → v1.21.100 …），保证高于同版官方且不带 `-` 后缀
+  （带 `-` 会被 electron-updater 当 prerelease 过滤；客户端 allowPrerelease=false）
+
+## 发新桌面版流程（UI 功能上线走这里）
+
+```bash
+cd /home/openchamber/openchamber-fork
+git checkout custom
+
+# 0. 若要跟上游：先按下方"日常升级流程"同步并 rebase
+
+# 1. bump 版本（三处必须一致，CI 有校验）
+sed -i 's/"version": "1.20.X"/"version": "1.20.Y"/' \
+  package.json packages/electron/package.json packages/web/package.json
+
+# 2. CHANGELOG.md 顶部加 "## [1.20.Y] - 日期" 段（create-release 会校验存在）
+
+# 3. 提交推送 —— 千万确认推的是 custom！（曾因忘 push 导致构建旧代码）
+git add -A && git commit -m "release: v1.20.Y" && git push origin custom
+git log --oneline -1   # 核对 HEAD 就是刚提交的
+
+# 4. tag + 推送
+git tag v1.20.Y && git push origin v1.20.Y
+
+# 5. ⚠️ fork 上 tag push 不会自动触发 workflow，必须手动 dispatch：
+curl -s -X POST -H "Authorization: token $(cat ~/.config/openchamber/github-token)" \
+  https://api.github.com/repos/Scartiris/openchamber/actions/workflows/release.yml/dispatches \
+  -d '{"ref":"custom","inputs":{"version":"1.20.Y","dry_run":"false"}}'
+
+# 6. 等 CI（约 8 分钟）：https://github.com/Scartiris/openchamber/actions
+#    成功后 release 自动 publish（exe + blockmap + latest.yml）
+#    若重发过同名版本，去 release 页删掉旧版本残留资产（如 1.20.0 exe）
+```
+
+## 日常升级流程（跟上游代码）
 
 ```bash
 cd /home/openchamber/openchamber-fork
