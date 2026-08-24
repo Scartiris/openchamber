@@ -47,6 +47,16 @@ jobs:
             echo "version=0.0.0-dev" >> "$GITHUB_OUTPUT"
           fi
 
+      - name: Verify packaged version matches release version
+        env:
+          VERSION: ${{ steps.get_version.outputs.version }}
+        run: |
+          PKG_VERSION=$(node -p "require('./packages/electron/package.json').version")
+          if [[ "$PKG_VERSION" != "$VERSION" ]]; then
+            echo "::error::packages/electron/package.json version ($PKG_VERSION) does not match release version ($VERSION). Bump package.json versions before tagging."
+            exit 1
+          fi
+
       - name: Extract changelog for release
         env:
           VERSION: ${{ steps.get_version.outputs.version }}
