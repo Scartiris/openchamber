@@ -18,6 +18,9 @@ import { fileURLToPath } from 'node:url';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(__dirname, '..');
 const updaterE2eBuild = process.env.OPENCHAMBER_UPDATER_E2E_BUILD === '1';
+// Compile-time token for private-repo update feeds. Never commit the real
+// value; CI injects it from secrets.UPDATER_READ_TOKEN.
+const updaterReadToken = process.env.OPENCHAMBER_UPDATER_READ_TOKEN ?? '';
 
 const result = await Bun.build({
   entrypoints: [path.join(root, 'main.mjs')],
@@ -36,6 +39,7 @@ const result = await Bun.build({
   naming: '[name].mjs',
   define: {
     __OPENCHAMBER_UPDATER_E2E_BUILD__: updaterE2eBuild ? 'true' : 'false',
+    __OPENCHAMBER_UPDATER_TOKEN__: JSON.stringify(updaterReadToken),
   },
 });
 

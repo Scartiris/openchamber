@@ -3062,6 +3062,18 @@ const setupAutoUpdater = () => {
 
   const testBuild = typeof __OPENCHAMBER_UPDATER_E2E_BUILD__ !== 'undefined'
     && __OPENCHAMBER_UPDATER_E2E_BUILD__ === true;
+  // Private-repo feeds need authenticated release reads. The token is baked
+  // in at bundle time (fine-grained, Contents:Read on this repo only) and
+  // handed to electron-updater via the GH_TOKEN environment variable it
+  // documents for private repositories.
+  const updaterReadToken = typeof __OPENCHAMBER_UPDATER_TOKEN__ !== 'undefined'
+    && typeof __OPENCHAMBER_UPDATER_TOKEN__ === 'string'
+    ? __OPENCHAMBER_UPDATER_TOKEN__
+    : '';
+  if (updaterReadToken) {
+    process.env.GH_TOKEN = updaterReadToken;
+    log.info('[electron] updater using embedded read-only token');
+  }
   const feed = resolveUpdaterFeed({ testBuild });
   const updaterChannel = feed.provider === 'github'
     ? resolveUpdaterChannel({ platform: process.platform, architecture: process.arch })
