@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [1.20.103] - 2026-08-25
+
+- **Private-repo updates:** the updater now authenticates with an embedded fine-grained read-only token, keeping auto-updates working after the repository switches to private.
+
 ## [1.20.102] - 2026-08-25
 
 - **Update push:** the desktop app now checks for releases every 5 minutes from the main process, silently downloads what it finds, and raises a system notification plus an in-app toast when the new version is ready to install — no more waiting for the hourly silent check.
