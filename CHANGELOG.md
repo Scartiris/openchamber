@@ -4,6 +4,11 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [1.20.104] - 2026-08-25
+
+- **i18n/zh-CN:** tool call cards now show Chinese display names (Read File, Shell Command, etc.) and common summaries via `chat.toolName.*` and `chat.toolPart.*` keys, removing the last large block of untranslated UI in everyday workflows.
+- **i18n:** template strings such as file counts, follow-up question counts, hidden-row counts and todo/subagent summaries are now localized across all 11 languages.
+
 ## [1.20.103] - 2026-08-25
 
 - **Private-repo updates:** the updater now authenticates with an embedded fine-grained read-only token, keeping auto-updates working after the repository switches to private.

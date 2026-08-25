@@ -1,4 +1,5 @@
 import React from 'react';
+import { useI18n } from '@/lib/i18n';
 import { useMobileAppActions } from '@/apps/mobileAppContext';
 import { cn } from '@/lib/utils';
 import type { TurnActivityRecord as TurnActivityPart } from '../../lib/turns/types';
@@ -14,7 +15,7 @@ import { Text } from '@/components/ui/text';
 import { Icon } from "@/components/icon/Icon";
 import { FadeInOnReveal } from '../FadeInOnReveal';
 import { getToolIcon } from './toolPresentation';
-import { getToolMetadata } from '@/lib/toolHelpers';
+import { useToolDisplayName } from './useToolDisplayName';
 import { isExpandableTool, isStandaloneTool, isStaticTool } from './toolRenderUtils';
 import { RuntimeAPIContext } from '@/contexts/runtimeAPIContext';
 import { useDirectoryStore } from '@/stores/useDirectoryStore';
@@ -156,9 +157,9 @@ const toTodoStatusKey = (value: unknown): 'pending' | 'in_progress' | 'completed
     return null;
 };
 
-const formatTodoSummary = (todos: unknown[]): string | null => {
+const formatTodoSummary = (todos: unknown[], t?: (key: string, params?: Record<string, unknown>) => string): string | null => {
     if (todos.length === 0) {
-        return '0 tasks';
+        return t ? t('chat.toolPart.todoTasks', { count: 0 }) : '0 tasks';
     }
 
     let pending = 0;
@@ -177,10 +178,10 @@ const formatTodoSummary = (todos: unknown[]): string | null => {
 
     const activeCount = pending + inProgress;
     if (activeCount === 0) {
-        return '0 tasks';
+        return t ? t('chat.toolPart.todoTasks', { count: 0 }) : '0 tasks';
     }
 
-    return `${activeCount} ${activeCount === 1 ? 'task' : 'tasks'}`;
+    return t ? t('chat.toolPart.todoTasks', { count: activeCount }) : `${activeCount} ${activeCount === 1 ? 'task' : 'tasks'}`;
 };
 
 const getTodoSummaryFromActivity = (activity: TurnActivityPart): string | null => {
@@ -570,7 +571,7 @@ const StaticToolRowInner: React.FC<{
     animateTailText: boolean;
 }> = ({ toolName, activities, animateTailText }) => {
     const showToolFileIcons = useUIStore((state) => state.showToolFileIcons);
-    const displayName = getToolMetadata(toolName).displayName;
+    const displayName = useToolDisplayName(toolName);
     const icon = getToolIcon(toolName);
     const isReadGroup = toolName.toLowerCase() === 'read';
     const runtime = React.useContext(RuntimeAPIContext);
@@ -843,7 +844,8 @@ const ProgressiveGroup: React.FC<ProgressiveGroupProps> = ({
     animateRows = true,
     animatedToolIds,
     renderJustificationActions,
-}) => {
+ }) => {
+    const { t } = useI18n();
     const previewCount = showHeader && !isExpanded
         ? Math.max(0, Math.floor(collapsedPreviewCount))
         : 0;
@@ -1007,7 +1009,7 @@ const ProgressiveGroup: React.FC<ProgressiveGroupProps> = ({
                                 onClick={onToggle}
                                 className="typography-meta leading-4 px-2 py-1 text-muted-foreground/45 hover:text-muted-foreground/65 text-left"
                             >
-                                +{previewHiddenCount} more...
+                                {t('chat.toolPart.moreHidden', { count: previewHiddenCount })}
                             </button>
                         ) : null}
                         <div className="space-y-1.5">{renderedRows}</div>

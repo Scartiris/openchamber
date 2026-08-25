@@ -5,7 +5,7 @@ import { RuntimeAPIContext } from '@/contexts/runtimeAPIContext';
 import { cn } from '@/lib/utils';
 import { SimpleMarkdownRenderer } from '../../MarkdownRenderer';
 import { MessageFilesDisplay } from '../../FileAttachment';
-import { getToolMetadata } from '@/lib/toolHelpers';
+import { useToolDisplayName } from './useToolDisplayName';
 import type { ToolPart as ToolPartType, ToolState as ToolStateUnion, FilePart } from '@opencode-ai/sdk/v2';
 import { toolDisplayStyles } from '@/lib/typography';
 import { WorkerHighlightedCode } from '@/components/code/WorkerHighlightedCode';
@@ -484,7 +484,12 @@ const getLspToolDescription = (input: Record<string, unknown> | undefined, curre
     return displayPath ? `${operation} ${displayPath}${position}` : operation;
 };
 
-const getToolDescription = (part: ToolPartType, state: ToolStateUnion, currentDirectory: string): string => {
+const getToolDescription = (
+    part: ToolPartType,
+    state: ToolStateUnion,
+    currentDirectory: string,
+    t?: (key: string, params?: Record<string, unknown>) => string,
+): string => {
     const stateWithData = state as ToolStateWithMetadata;
     const metadata = stateWithData.metadata;
     const input = stateWithData.input;
@@ -497,7 +502,7 @@ const getToolDescription = (part: ToolPartType, state: ToolStateUnion, currentDi
     if (part.tool === 'apply_patch') {
         const files = Array.isArray(metadata?.files) ? metadata?.files : [];
         if (files.length > 1) {
-            return `${files.length} files`;
+            return t ? (t as (k: string, p?: Record<string, unknown>) => string)('chat.toolPart.filesCount', { count: files.length }) : `${files.length} files`;
         }
         return '';
     }
@@ -505,7 +510,7 @@ const getToolDescription = (part: ToolPartType, state: ToolStateUnion, currentDi
     // Question tool: show "Asked N question(s)"
     if (part.tool === 'question' && input?.questions && Array.isArray(input.questions)) {
         const count = input.questions.length;
-        return `Asked ${count} question${count !== 1 ? 's' : ''}`;
+        return t ? (t as (k: string, p?: Record<string, unknown>) => string)('chat.toolPart.questionsAsked', { count }) : `Asked ${count} question${count !== 1 ? 's' : ''}`;
     }
 
     if (part.tool === 'bash' && input?.command && typeof input.command === 'string') {
@@ -880,7 +885,7 @@ const TaskSummaryEntryRow = React.memo(({
     const label = getTaskSummaryLabel(entry);
     const hasLabel = label.trim().length > 0;
     const status = entry.state?.status;
-    const displayName = getToolMetadata(toolName).displayName;
+    const displayName = useToolDisplayName(toolName);
 
     return (
         <ToolRevealOnMount animate={animateTailText} wipe>
@@ -945,6 +950,7 @@ const TaskSummaryEntriesList = React.memo(({
     animateTailText: boolean;
     showToolFileIcons: boolean;
 }) => {
+    const { t } = useI18n();
     const visibleEntries = isExpanded ? entries : entries.slice(-6);
     const hiddenCount = Math.max(0, entries.length - visibleEntries.length);
     const visibleStartIndex = entries.length - visibleEntries.length;
@@ -953,7 +959,7 @@ const TaskSummaryEntriesList = React.memo(({
         <ToolScrollableSection maxHeightClass={isExpanded ? 'max-h-[40vh]' : 'max-h-56'} disableHorizontal>
             <div className="w-full min-w-0 space-y-1">
                 {hiddenCount > 0 ? (
-                    <div className="typography-micro text-muted-foreground/70">+{hiddenCount} more…</div>
+                    <div className="typography-micro text-muted-foreground/70">{t('chat.toolPart.moreHidden', { count: hiddenCount })}</div>
                 ) : null}
 
                 {visibleEntries.map((entry, idx) => {
@@ -1034,7 +1040,7 @@ const TaskToolSummary: React.FC<{
         return (
             <div className="relative pr-2 pb-2 pt-2 space-y-2 pl-[1.4375rem]">
                 <div className="typography-meta text-muted-foreground/70">
-                    {isActive ? 'Waiting for subagent activity...' : 'No subagent session id on task metadata.'}
+                    {isActive ? t('chat.toolPart.subagentWaiting') : t('chat.toolPart.subagentNoSession')}
                 </div>
             </div>
         );
@@ -1965,8 +1971,8 @@ const ToolPartContent: React.FC<ToolPartProps> = ({
     const isMultiFileApplyPatch = normalizedPartTool === 'apply_patch' && Array.isArray(metadata?.files) && (metadata?.files as []).length > 1;
     const normalizedPart = normalizedPartTool !== part.tool ? ({ ...part, tool: normalizedPartTool } as ToolPartType) : part;
     const descriptionPath = getToolDescriptionPath(normalizedPart, state, currentDirectory);
-    const description = getToolDescription(normalizedPart, state, currentDirectory);
-    const displayName = getToolMetadata(normalizedPartTool || part.tool).displayName;
+    const description = getToolDescription(normalizedPart, state, currentDirectory, t as unknown as (key: string, params?: Record<string, unknown>) => string);
+    const displayName = useToolDisplayName(normalizedPartTool || part.tool);
     
     // Tool title/description — shown inline as context
     const justificationText = React.useMemo(() => {
@@ -2332,7 +2338,7 @@ class ToolPartErrorBoundary extends React.Component<{
 const ToolPart: React.FC<ToolPartProps> = (props) => {
     const { t } = useI18n();
     const toolName = normalizeToolName(props.part.tool) || 'tool';
-    const displayName = getToolMetadata(toolName).displayName;
+    const displayName = useToolDisplayName(toolName);
 
     return (
         <ToolPartErrorBoundary
