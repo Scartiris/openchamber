@@ -963,6 +963,7 @@ export const dict: Record<I18nKey, string> = {
   'tokenUsage.model': 'Model',
   'tokenUsage.empty': 'Brak zużycia tokenów w tym zakresie',
   'tokenUsage.error': 'Nie udało się załadować statystyk tokenów',
+  "tokenUsage.retry": "Ponów",
   'errorBoundary.title': 'Coś poszło nie tak',
   'errorBoundary.description': 'Aplikacja napotkała nieoczekiwany błąd. Zostało to zalogowane do celów debugowania.',
   'errorBoundary.state.unknownError': 'Nieznany błąd',

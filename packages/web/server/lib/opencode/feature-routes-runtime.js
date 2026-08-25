@@ -139,6 +139,7 @@ export const createFeatureRoutesRuntime = (dependencies) => {
       buildOpenCodeUrl,
       getOpenCodeAuthHeaders,
       waitForOpenCodeReady,
+      openchamberDataDir,
     });
 
     registerSettingsUtilityRoutes(app, {

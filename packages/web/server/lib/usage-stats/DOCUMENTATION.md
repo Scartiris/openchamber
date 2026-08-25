@@ -26,9 +26,18 @@ cache.write) plus per-message cost, over a rolling local-date window.
 
 ## Caching
 
-Single-flight cache keyed by window length with a 60s TTL. First call after a
-cold start walks the whole window and can take tens of seconds on large
-histories; callers should tolerate slow first responses.
+Two layers, keyed by local-midnight cutoff:
+
+- **History** (everything before today's midnight): collected once per day per
+  window start, persisted to `<openchamberDataDir>/token-stats-history.json`
+  and cached in memory. Second requests are instant even across server
+  restarts; the file is rewritten when the cutoff rolls over.
+- **Today**: fresh single-flight collection with a 60s TTL.
+
+Collection runs with session concurrency 3, a 50ms pause between message pages,
+and a 90s deadline after which walks return partial results instead of hanging.
+First-ever request for a long window can still take a while; callers should
+surface progress and allow retries.
 
 ## Contracts
 

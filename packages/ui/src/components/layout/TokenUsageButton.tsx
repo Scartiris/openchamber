@@ -48,9 +48,6 @@ export const formatCompactTokens = (value: number): string => {
     return String(Math.round(value));
 };
 
-const formatCost = (value: number): string =>
-    value.toLocaleString(undefined, { style: 'currency', currency: 'USD', maximumFractionDigits: value < 10 ? 2 : 0 });
-
 interface StatsState {
     data: TokenStatsResponse | null;
     loading: boolean;
@@ -66,20 +63,31 @@ export const useTokenStats = (range: TokenStatsRange, enabled: boolean): StatsSt
     useEffect(() => {
         if (!enabled) return;
         let cancelled = false;
+        const controller = new AbortController();
+        // First-ever collection of a long window can legitimately take a
+        // while server-side; past that, fail visibly instead of hanging.
+        const timeout = window.setTimeout(() => controller.abort(), 120_000);
         setState((previous) => ({ ...previous, loading: true, error: null }));
-        runtimeFetch(`/api/token-stats?days=${range}`)
+        runtimeFetch(`/api/token-stats?days=${range}`, { signal: controller.signal })
             .then(async (response) => {
-                if (!response.ok) throw new Error(`HTTP ${response.status}`);
+                if (!response.ok) {
+                    const body = await response.json().catch(() => null) as { error?: string } | null;
+                    throw new Error(body?.error || `HTTP ${response.status}`);
+                }
                 return response.json() as Promise<TokenStatsResponse>;
             })
             .then((data) => {
                 if (!cancelled) setState({ data, loading: false, error: null });
             })
             .catch((error: unknown) => {
-                if (!cancelled) setState({ data: null, loading: false, error: error instanceof Error ? error.message : 'failed' });
+                if (cancelled) return;
+                const message = error instanceof Error ? error.message : 'failed';
+                setState({ data: null, loading: false, error: message });
             });
         return () => {
             cancelled = true;
+            window.clearTimeout(timeout);
+            controller.abort();
         };
     }, [range, enabled, tick]);
 
@@ -118,9 +126,8 @@ const DailyView: React.FC<{ byDay: DayUsage[] }> = ({ byDay }) => {
                     <div className="min-w-0 flex-1">
                         <StackedBar tokens={day.tokens} max={max} />
                     </div>
-                    <div className="flex w-28 shrink-0 flex-col items-end leading-tight">
+                    <div className="w-24 shrink-0 text-right">
                         <span className="typography-ui-label font-medium tabular-nums text-foreground">{formatCompactTokens(day.tokens.total)}</span>
-                        <span className="text-[10px] tabular-nums text-muted-foreground">{formatCost(day.cost)}</span>
                     </div>
                 </div>
             ))}
@@ -178,7 +185,6 @@ const ModelsView: React.FC<{ byDay: DayUsage[] }> = ({ byDay }) => {
                     <div key={providerID} className="overflow-hidden rounded-lg border border-border">
                         <div className="flex items-center justify-between border-b border-border bg-[var(--surface-muted)]/50 px-3 py-1.5">
                             <span className="typography-ui-label font-medium text-foreground">{providerID}</span>
-                            <span className="text-xs tabular-nums text-muted-foreground">{formatCost(rows.reduce((sum, [, model]) => sum + model.cost, 0))}</span>
                         </div>
                         <table className="w-full text-xs">
                             <thead>
@@ -276,7 +282,6 @@ export const TokenUsageButton: React.FC<{ className?: string }> = ({ className }
                                     value={formatCompactTokens(stats.data?.today.tokens[key] ?? 0)}
                                 />
                             ))}
-                            <StatPill label={t('tokenUsage.cost')} value={formatCost(stats.data?.today.cost ?? 0)} />
                         </div>
                     </div>
                     <div className="flex items-center gap-1 border-b border-border px-4 py-2">
@@ -293,7 +298,21 @@ export const TokenUsageButton: React.FC<{ className?: string }> = ({ className }
                                 {tab === 'daily' ? t('tokenUsage.tab.daily') : t('tokenUsage.tab.models')}
                             </button>
                         ))}
-                        {stats.error ? <span className="ml-auto text-xs text-destructive">{t('tokenUsage.error')}</span> : null}
+                        {stats.error ? (
+                            <button
+                                type="button"
+                                onClick={stats.refresh}
+                                className="ml-auto inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-destructive hover:bg-destructive/10 transition-colors"
+                            >
+                                <Icon name="arrow-go-back" className="h-3.5 w-3.5" />
+                                {t('tokenUsage.retry')}
+                                {stats.data ? null : (
+                                    <span className="max-w-48 truncate font-normal text-muted-foreground" title={stats.error}>
+                                        {stats.error}
+                                    </span>
+                                )}
+                            </button>
+                        ) : null}
                     </div>
                     <div className="max-h-[55vh] overflow-y-auto px-4 py-3">
                         {stats.loading && !stats.data ? (

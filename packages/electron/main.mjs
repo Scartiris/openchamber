@@ -3095,13 +3095,81 @@ const setupAutoUpdater = () => {
     setTaskbarProgress(-1);
     if (state.pendingUpdate) {
       state.pendingUpdate.downloaded = true;
+      state.pendingUpdate.downloading = false;
     }
+    // Push-style notification: the user should learn about a ready update
+    // without opening the settings page.
+    emitToAllWindows('openchamber:update-ready', { version: info?.version || null });
+    maybeShowNativeNotification({
+      title: 'OpenChamber',
+      body: info?.version
+        ? `Version ${info.version} is ready — restart to update`
+        : 'An update is ready — restart to update',
+      tag: 'update-ready',
+    });
   });
 
   autoUpdater.on('error', (err) => {
     setTaskbarProgress(-1);
     log.error('[electron] autoUpdater error', err);
   });
+};
+
+// Fork addition: push-style update delivery. The stock flow only checks when
+// the renderer asks and never downloads on its own, so releases could sit
+// unnoticed for hours. Poll in the main process, download silently, and let
+// the update-downloaded handler above notify.
+const UPDATE_POLL_FIRST_DELAY_MS = 60 * 1000;
+const UPDATE_POLL_INTERVAL_MS = 5 * 60 * 1000;
+
+const runUpdateCheckCycle = async () => {
+  if (state.pendingUpdate?.downloaded) {
+    // Ready but not installed yet; nothing new to fetch. The notification was
+    // already shown when the download finished.
+    return;
+  }
+  assertUpdaterCapability({ packaged: app.isPackaged });
+  const { available, pendingUpdate } = await checkForDesktopUpdate({
+    autoUpdater,
+    currentVersion: APP_VERSION,
+    pendingUpdate: state.pendingUpdate,
+    compareVersions: compareSemver,
+  });
+  if (!available || !pendingUpdate) {
+    return;
+  }
+  // Preserve a previously downloaded flag if the re-check raced an install.
+  const downloaded = state.pendingUpdate?.downloaded === true;
+  state.pendingUpdate = { ...pendingUpdate, downloaded };
+  if (!downloaded && !state.pendingUpdate.downloading) {
+    state.pendingUpdate.downloading = true;
+    log.info('[electron] auto-downloading update', { version: pendingUpdate.version || 'unknown' });
+    Promise.resolve(autoUpdater.downloadUpdate()).catch((error) => {
+      state.pendingUpdate.downloading = false;
+      log.error('[electron] silent update download failed', error);
+    });
+  }
+};
+
+const startUpdateAutoPolling = () => {
+  if (!app.isPackaged) {
+    return;
+  }
+  let timer = null;
+  const schedule = (delay) => {
+    if (timer) clearTimeout(timer);
+    timer = setTimeout(run, delay);
+  };
+  const run = async () => {
+    try {
+      await runUpdateCheckCycle();
+    } catch (error) {
+      log.warn('[electron] update poll cycle failed', error?.message || error);
+    } finally {
+      schedule(UPDATE_POLL_INTERVAL_MS);
+    }
+  };
+  schedule(UPDATE_POLL_FIRST_DELAY_MS);
 };
 
 const parseRelevantChangelogNotes = async (fromVersion, toVersion) => {
@@ -5391,6 +5459,7 @@ app.whenReady().then(async () => {
   registerPackagedUiProtocol();
   hardenBrowserPanelSession();
   setupAutoUpdater();
+  startUpdateAutoPolling();
 
   if (process.platform === 'darwin') {
     Menu.setApplicationMenu(buildMacMenu());

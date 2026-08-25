@@ -92,10 +92,11 @@ test('aggregates tokens per day, provider and model with cost sums', async () =>
       archived: [],
     },
     messagesBySession: {
+      // Oldest→newest, matching the API's chronological order.
       ses_a: [
-        { info: { id: 'm1', ...assistantMessage({ created: todayNoon.getTime(), providerID: 'opencode-go', modelID: 'muse-1', cost: 0.1 }) } },
         { info: { id: 'm2', ...assistantMessage({ created: yesterdayNoon, providerID: 'openrouter', modelID: 'ox-alpha', cost: 0.2 }) } },
-        { info: { id: 'm3', info_role_skip: true, ...assistantMessage({ created: todayNoon.getTime() }), role: 'user' } },
+        { info: { id: 'm3', role: 'user', time: { created: todayNoon.getTime() } } },
+        { info: { id: 'm1', ...assistantMessage({ created: todayNoon.getTime(), providerID: 'opencode-go', modelID: 'muse-1', cost: 0.1 }) } },
       ],
     },
   });
@@ -187,5 +188,6 @@ test('skips sessions entirely older than the window', async () => {
     },
   });
   await service.getStats(7);
-  assert.equal(messageCalls, 1);
+  // History and today ranges each walk the session once.
+  assert.equal(messageCalls, 2);
 });

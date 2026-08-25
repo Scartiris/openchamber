@@ -2810,6 +2810,7 @@ export const dict: Record<I18nKey, string> = {
   'tokenUsage.model': '모델',
   'tokenUsage.empty': '이 기간에 토큰 사용이 없습니다',
   'tokenUsage.error': '토큰 통계를 불러오지 못했습니다',
+  "tokenUsage.retry": "재시도",
   'errorBoundary.title': '문제가 발생했습니다',
   'errorBoundary.description': '애플리케이션에서 예상치 못한 오류가 발생했습니다. 디버깅을 위해 기록되었습니다.',
   'errorBoundary.state.unknownError': '알 수 없음 오류',

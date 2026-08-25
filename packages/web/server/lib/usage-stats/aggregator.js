@@ -1,12 +1,18 @@
+import fs from 'node:fs/promises';
+import path from 'node:path';
 import { createOpencodeClient } from '@opencode-ai/sdk/v2';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const SESSION_PAGE_LIMIT = 200;
 const MESSAGE_PAGE_LIMIT = 100;
-const MAX_CONCURRENT_SESSIONS = 6;
+const MAX_CONCURRENT_SESSIONS = 3;
+const MESSAGE_PAGE_DELAY_MS = 50;
+const COLLECT_DEADLINE_MS = 90_000;
 
 export const USAGE_STATS_MIN_DAYS = 1;
 export const USAGE_STATS_MAX_DAYS = 90;
+export const TODAY_CACHE_TTL_MS = 60_000;
+export const HISTORY_DISK_FILENAME = 'token-stats-history.json';
 
 export const clampStatsDays = (value) => {
   const parsed = Number.parseInt(String(value ?? ''), 10);
@@ -27,6 +33,12 @@ export const rangeStartDate = (days, now = Date.now()) => {
   return start.getTime() - (days - 1) * DAY_MS;
 };
 
+export const localMidnight = (now = Date.now()) => {
+  const start = new Date(now);
+  start.setHours(0, 0, 0, 0);
+  return start.getTime();
+};
+
 const emptyTokens = () => ({ input: 0, output: 0, reasoning: 0, cacheRead: 0, cacheWrite: 0 });
 
 const finite = (value) => (Number.isFinite(value) ? value : 0);
@@ -41,7 +53,7 @@ const addMessageTokens = (bucket, message) => {
   bucket.cacheWrite += finite(cache.write);
 };
 
-const tokensTotal = (bucket) =>
+export const tokensTotal = (bucket) =>
   bucket.input + bucket.output + bucket.reasoning + bucket.cacheRead + bucket.cacheWrite;
 
 const ensureDayEntry = (byDay, date) => {
@@ -71,10 +83,11 @@ const ensureModelEntry = (providerEntry, modelID) => {
   return entry;
 };
 
-const accumulateMessage = (byDay, message, startDate) => {
+const accumulateMessage = (byDay, message, startDate, endDate) => {
   if (!message || message.role !== 'assistant') return false;
   const created = message.time?.created;
   if (!Number.isFinite(created) || created < startDate) return false;
+  if (endDate !== undefined && created >= endDate) return false;
   const date = localDateString(created);
   const dayEntry = ensureDayEntry(byDay, date);
   const providerEntry = ensureProviderEntry(dayEntry, message.providerID || 'unknown');
@@ -93,11 +106,12 @@ const accumulateMessage = (byDay, message, startDate) => {
 
 const nextCursorFrom = (response) => response?.response?.headers?.get?.('x-next-cursor') ?? undefined;
 
-async function listRecentSessions(client, startDate) {
+async function listRecentSessions(client, startDate, deadline) {
   const sessions = [];
   for (const archived of [false, true]) {
     let cursor;
     while (true) {
+      if (Date.now() > deadline) return sessions;
       const response = await client.experimental.session.list({
         archived,
         limit: SESSION_PAGE_LIMIT,
@@ -115,19 +129,22 @@ async function listRecentSessions(client, startDate) {
         }
       }
       const next = nextCursorFrom(response);
-      if (!next || !Number.isFinite(next) || next >= cursor && cursor !== undefined) break;
+      if (!next || !Number.isFinite(next)) break;
+      const nextNumber = Number(next);
+      if (cursor !== undefined && nextNumber >= cursor) break;
       // The cursor is strictly decreasing; a fully stale page means every
       // later page is older still.
       if (oldestUpdated < startDate) break;
-      cursor = Number(next);
+      cursor = nextNumber;
     }
   }
   return sessions;
 }
 
-async function collectSessionUsage(client, session, startDate, byDay) {
+async function collectSessionUsage(client, session, startDate, endDate, byDay, deadline) {
   let before;
   while (true) {
+    if (Date.now() > deadline) return;
     const response = await client.session.messages({
       sessionID: session.id,
       directory: session.directory,
@@ -141,11 +158,13 @@ async function collectSessionUsage(client, session, startDate, byDay) {
       const info = record?.info;
       const created = info?.time?.created;
       if (Number.isFinite(created)) oldestCreated = Math.min(oldestCreated, created);
-      accumulateMessage(byDay, info, startDate);
+      accumulateMessage(byDay, info, startDate, endDate);
     }
     const next = nextCursorFrom(response);
     if (!next || oldestCreated < startDate) break;
     before = next;
+    // Give the OpenCode server breathing room between deep walks.
+    await new Promise((resolve) => setTimeout(resolve, MESSAGE_PAGE_DELAY_MS));
   }
 }
 
@@ -163,7 +182,7 @@ async function mapWithConcurrency(items, limit, worker) {
 
 const serializeTokens = (bucket) => ({ ...bucket, total: tokensTotal(bucket) });
 
-const serializeByDay = (byDay) =>
+export const serializeByDay = (byDay) =>
   [...byDay.values()]
     .sort((left, right) => left.date.localeCompare(right.date))
     .map((dayEntry) => ({
@@ -186,18 +205,90 @@ const serializeByDay = (byDay) =>
         })),
     }));
 
+// Rebuilds an aggregation Map from a serialized byDay array so persisted
+// history can be merged with freshly collected ranges.
+export const deserializeByDay = (serialized) => {
+  const byDay = new Map();
+  for (const day of Array.isArray(serialized) ? serialized : []) {
+    if (!day?.date) continue;
+    const dayEntry = ensureDayEntry(byDay, day.date);
+    for (const key of ['input', 'output', 'reasoning', 'cacheRead', 'cacheWrite']) {
+      dayEntry.tokens[key] += finite(day.tokens?.[key]);
+    }
+    dayEntry.cost += finite(day.cost);
+    for (const provider of day.providers ?? []) {
+      if (!provider?.providerID) continue;
+      const providerEntry = ensureProviderEntry(dayEntry, provider.providerID);
+      for (const key of ['input', 'output', 'reasoning', 'cacheRead', 'cacheWrite']) {
+        providerEntry.tokens[key] += finite(provider.tokens?.[key]);
+      }
+      providerEntry.cost += finite(provider.cost);
+      for (const model of provider.models ?? []) {
+        if (!model?.modelID) continue;
+        const modelEntry = ensureModelEntry(providerEntry, model.modelID);
+        for (const key of ['input', 'output', 'reasoning', 'cacheRead', 'cacheWrite']) {
+          modelEntry.tokens[key] += finite(model.tokens?.[key]);
+        }
+        modelEntry.cost += finite(model.cost);
+      }
+    }
+  }
+  return byDay;
+};
+
+export const mergeByDayMaps = (maps) => {
+  const merged = new Map();
+  for (const map of maps) {
+    for (const [date, dayEntry] of map) {
+      const target = ensureDayEntry(merged, date);
+      for (const key of ['input', 'output', 'reasoning', 'cacheRead', 'cacheWrite']) {
+        target.tokens[key] += dayEntry.tokens[key];
+      }
+      target.cost += dayEntry.cost;
+      for (const [providerID, providerEntry] of dayEntry.providers) {
+        const targetProvider = ensureProviderEntry(target, providerID);
+        for (const key of ['input', 'output', 'reasoning', 'cacheRead', 'cacheWrite']) {
+          targetProvider.tokens[key] += providerEntry.tokens[key];
+        }
+        targetProvider.cost += providerEntry.cost;
+        for (const [modelID, modelEntry] of providerEntry.models) {
+          const targetModel = ensureModelEntry(targetProvider, modelID);
+          for (const key of ['input', 'output', 'reasoning', 'cacheRead', 'cacheWrite']) {
+            targetModel.tokens[key] += modelEntry.tokens[key];
+          }
+          targetModel.cost += modelEntry.cost;
+        }
+      }
+    }
+  }
+  return merged;
+};
+
 export const createUsageStatsService = ({
   buildOpenCodeUrl,
   getOpenCodeAuthHeaders,
   waitForOpenCodeReady,
+  openchamberDataDir,
   createClient = createOpencodeClient,
+  now = () => Date.now(),
 }) => {
   if (typeof buildOpenCodeUrl !== 'function' || typeof getOpenCodeAuthHeaders !== 'function') {
     throw new Error('usage-stats service requires buildOpenCodeUrl and getOpenCodeAuthHeaders');
   }
 
-  let cacheEntry = null;
-  let pending = null;
+  const historyFilePath = openchamberDataDir
+    ? path.join(openchamberDataDir, HISTORY_DISK_FILENAME)
+    : null;
+
+  // History (everything before today's local midnight) only changes once per
+  // day, so it is cached in memory AND on disk keyed by its cutoff midnight.
+  // Different window lengths use different start dates; the disk file keeps a
+  // range per start date so they can coexist.
+  let historyCache = null; // { cutoff, ranges: Map<startMs, Map> }
+  let historyPending = null;
+  // Today's numbers move constantly; short single-flight cache only.
+  let todayCache = null; // { cutoff, fetchedAt, data }
+  let todayPending = null;
 
   const getClient = async () => {
     if (typeof waitForOpenCodeReady === 'function') await waitForOpenCodeReady(10_000, 250);
@@ -207,28 +298,130 @@ export const createUsageStatsService = ({
     });
   };
 
-  const collect = async (days, now) => {
-    const client = await getClient();
-    const startDate = rangeStartDate(days, now);
-    const todayDate = localDateString(now);
-    const byDay = new Map();
+  const readHistoryDisk = async (cutoff, startMs) => {
+    if (!historyFilePath) return null;
+    try {
+      const raw = await fs.readFile(historyFilePath, 'utf8');
+      const parsed = JSON.parse(raw);
+      if (parsed?.cutoff !== cutoff) return null;
+      const serialized = parsed?.ranges?.[String(startMs)];
+      return Array.isArray(serialized) ? deserializeByDay(serialized) : null;
+    } catch {
+      return null;
+    }
+  };
 
-    const sessions = await listRecentSessions(client, startDate);
+  const writeHistoryDisk = async (cutoff, startMs, data) => {
+    if (!historyFilePath) return;
+    try {
+      let ranges = {};
+      try {
+        const raw = await fs.readFile(historyFilePath, 'utf8');
+        const parsed = JSON.parse(raw);
+        // Keep other ranges of the same cutoff day; anything older is stale.
+        if (parsed?.cutoff === cutoff && parsed?.ranges && typeof parsed.ranges === 'object') {
+          ranges = parsed.ranges;
+        }
+      } catch {
+        // No usable previous file.
+      }
+      ranges[String(startMs)] = serializeByDay(data);
+      await fs.mkdir(path.dirname(historyFilePath), { recursive: true });
+      await fs.writeFile(
+        historyFilePath,
+        JSON.stringify({ cutoff, generatedAt: now(), ranges }),
+        'utf8',
+      );
+    } catch (error) {
+      console.error('token-stats: failed to persist history cache:', error?.message || error);
+    }
+  };
+
+  const loadHistory = async (startMs, cutoff) => {
+    if (historyCache && historyCache.cutoff === cutoff) {
+      const cached = historyCache.ranges.get(startMs);
+      if (cached) return cached;
+    } else {
+      historyCache = { cutoff, ranges: new Map() };
+    }
+    const pendingKey = `hist:${startMs}`;
+    if (historyPending?.key === pendingKey) return historyPending.promise;
+
+    const promise = (async () => {
+      try {
+        let data = await readHistoryDisk(cutoff, startMs);
+        if (!data) {
+          data = await collectRange(startMs, cutoff, now() + COLLECT_DEADLINE_MS);
+          await writeHistoryDisk(cutoff, startMs, data);
+        }
+        historyCache.ranges.set(startMs, data);
+        return data;
+      } finally {
+        if (historyPending?.key === pendingKey) historyPending = null;
+      }
+    })();
+    historyPending = { key: pendingKey, promise };
+    return promise;
+  };
+
+  const loadToday = async (cutoff) => {
+    const nowMs = now();
+    if (todayCache && todayCache.cutoff === cutoff && nowMs - todayCache.fetchedAt < TODAY_CACHE_TTL_MS) {
+      return todayCache.data;
+    }
+    if (todayPending) return todayPending;
+
+    todayPending = (async () => {
+      try {
+        const data = await collectRange(cutoff, undefined, nowMs + COLLECT_DEADLINE_MS);
+        todayCache = { cutoff, fetchedAt: now(), data };
+        return data;
+      } finally {
+        todayPending = null;
+      }
+    })();
+    return todayPending;
+  };
+
+  const collectRange = async (startDate, endDate, deadline) => {
+    const client = await getClient();
+    const byDay = new Map();
+    const sessions = await listRecentSessions(client, startDate, deadline);
     await mapWithConcurrency(sessions, MAX_CONCURRENT_SESSIONS, async (session) => {
       try {
-        await collectSessionUsage(client, session, startDate, byDay);
+        await collectSessionUsage(client, session, startDate, endDate, byDay, deadline);
       } catch (error) {
         console.error(`token-stats: failed to collect session ${session.id}:`, error?.message || error);
       }
     });
+    return byDay;
+  };
 
-    const serialized = serializeByDay(byDay);
+  const getStats = async (rawDays) => {
+    const days = clampStatsDays(rawDays);
+    const nowMs = now();
+    const todayCutoff = localMidnight(nowMs);
+    const windowStart = rangeStartDate(days, nowMs);
+
+    const maps = [];
+    // Both branches walk bounded ranges: history is cutoff-bounded and cached,
+    // today's range is the live tail.
+    maps.push(await loadHistory(windowStart, todayCutoff));
+    maps.push(await loadToday(todayCutoff));
+
+    const byDay = mergeByDayMaps(maps);
+    const startDateString = localDateString(windowStart);
+    const serialized = serializeByDay(
+      new Map([...byDay.entries()].filter(([date]) => date >= startDateString)),
+    );
+
+    const todayDate = localDateString(nowMs);
     const todayEntry = byDay.get(todayDate);
     const todayTokens = todayEntry ? todayEntry.tokens : emptyTokens();
     return {
-      generatedAt: now,
+      generatedAt: nowMs,
       rangeDays: days,
-      timezoneOffsetMinutes: new Date(now).getTimezoneOffset(),
+      timezoneOffsetMinutes: new Date(nowMs).getTimezoneOffset(),
       today: {
         date: todayDate,
         tokens: serializeTokens(todayTokens),
@@ -236,26 +429,6 @@ export const createUsageStatsService = ({
       },
       byDay: serialized,
     };
-  };
-
-  const getStats = async (rawDays) => {
-    const days = clampStatsDays(rawDays);
-    const now = Date.now();
-    if (cacheEntry && cacheEntry.days === days && now - cacheEntry.fetchedAt < STATS_CACHE_TTL_MS) {
-      return cacheEntry.data;
-    }
-    if (!pending) {
-      pending = (async () => {
-        try {
-          const data = await collect(days, Date.now());
-          cacheEntry = { days, fetchedAt: Date.now(), data };
-          return data;
-        } finally {
-          pending = null;
-        }
-      })();
-    }
-    return pending;
   };
 
   return { getStats };

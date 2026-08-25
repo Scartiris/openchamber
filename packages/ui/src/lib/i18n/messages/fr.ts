@@ -2511,6 +2511,7 @@ export const dict = {
   'tokenUsage.model': 'Modèle',
   'tokenUsage.empty': 'Aucune consommation de jetons sur cette période',
   'tokenUsage.error': 'Échec du chargement des statistiques de jetons',
+  "tokenUsage.retry": "Réessayer",
   'errorBoundary.title': 'Quelque chose s\'est mal passé',
   'errorBoundary.description': 'L\'application a rencontré une erreur inattendue. Cela a été enregistré pour le débogage.',
   'errorBoundary.state.unknownError': 'Erreur inconnue',

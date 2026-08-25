@@ -2810,6 +2810,7 @@ export const dict = {
   'tokenUsage.model': 'Model',
   'tokenUsage.empty': 'No token usage in this range',
   'tokenUsage.error': 'Failed to load token stats',
+  "tokenUsage.retry": "Retry",
   'errorBoundary.title': 'Something went wrong',
   'errorBoundary.description': 'The application encountered an unexpected error. This has been logged for debugging.',
   'errorBoundary.state.unknownError': 'Unknown error',

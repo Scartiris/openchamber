@@ -2632,6 +2632,7 @@ export const dict = {
   'tokenUsage.model': 'Modell',
   'tokenUsage.empty': 'Keine Token-Nutzung in diesem Zeitraum',
   'tokenUsage.error': 'Token-Statistiken konnten nicht geladen werden',
+  "tokenUsage.retry": "Erneut versuchen",
   'errorBoundary.title': 'Etwas ist schiefgelaufen',
   'errorBoundary.description': 'Die Anwendung hat einen unerwarteten Fehler festgestellt. Dies wurde zur Fehlersuche protokolliert.',
   'errorBoundary.state.unknownError': 'Unbekannter Fehler',

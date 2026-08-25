@@ -2776,6 +2776,7 @@ export const dict: Record<I18nKey, string> = {
   'tokenUsage.model': '模型',
   'tokenUsage.empty': '该时间范围内无 Token 消耗',
   'tokenUsage.error': '加载 Token 统计失败',
+  "tokenUsage.retry": "重试",
   'errorBoundary.title': '发生错误',
   'errorBoundary.description': '应用遇到意外错误，已记录用于调试。',
   'errorBoundary.state.unknownError': '未知错误',

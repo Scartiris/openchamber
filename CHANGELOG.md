@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [1.20.102] - 2026-08-25
+
+- **Update push:** the desktop app now checks for releases every 5 minutes from the main process, silently downloads what it finds, and raises a system notification plus an in-app toast when the new version is ready to install — no more waiting for the hourly silent check.
+- **Token stats stability:** usage history (before today's midnight) is collected once per day and persisted to disk, so reopening the dialog or restarting the app is instant instead of re-walking every session; collection runs at lower concurrency with a 90s deadline and page pacing to keep the OpenCode server responsive.
+- **Token stats UI:** removed the USD cost displays; failed loads now show a retry button with the underlying error instead of a dead-end message, and requests abort cleanly after 120s.
+
 ## [1.20.101] - 2026-08-25
 
 - **Token usage statistics:** a new titlebar button shows today's total token consumption at a glance; the dialog breaks usage down by day and by model, grouped by provider, across input / output / reasoning / cache read / cache write plus cost, with today / 7-day / 30-day ranges.

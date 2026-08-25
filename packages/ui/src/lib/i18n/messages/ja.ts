@@ -2809,6 +2809,7 @@ export const dict: Record<I18nKey, string> = {
   'tokenUsage.model': 'モデル',
   'tokenUsage.empty': 'この期間のトークン使用はありません',
   'tokenUsage.error': 'トークン統計の読み込みに失敗しました',
+  "tokenUsage.retry": "再試行",
   'errorBoundary.title': '問題が発生しました',
   'errorBoundary.description': 'アプリケーションで予期しないエラーが発生しました。デバッグ用に記録されています。',
   'errorBoundary.state.unknownError': '不明なエラー',

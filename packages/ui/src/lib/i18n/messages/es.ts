@@ -2776,6 +2776,7 @@ export const dict: Record<I18nKey, string> = {
   "tokenUsage.model": "Modelo",
   "tokenUsage.empty": "Sin consumo de tokens en este rango",
   "tokenUsage.error": "Error al cargar estadísticas de tokens",
+  "tokenUsage.retry": "Reintentar",
   "errorBoundary.title": "Algo salió mal",
   "errorBoundary.description": "La aplicación encontró un error inesperado. Esto se ha registrado para depuración.",
   "errorBoundary.state.unknownError": "Error desconocido",

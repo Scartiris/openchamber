@@ -2776,6 +2776,7 @@ export const dict: Record<I18nKey, string> = {
   "tokenUsage.model": "Модель",
   "tokenUsage.empty": "Немає витрат токенів за цей період",
   "tokenUsage.error": "Не вдалося завантажити статистику токенів",
+  "tokenUsage.retry": "Повторити",
   "errorBoundary.title": "Щось пішло не так",
   "errorBoundary.description": "У програмі сталася неочікувана помилка. Це було зареєстровано для налагодження.",
   "errorBoundary.state.unknownError": "Невідома помилка",

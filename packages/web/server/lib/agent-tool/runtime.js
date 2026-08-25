@@ -42,8 +42,8 @@ const MEMORY_PARAMETER_NAMES = [...MEMORY_ONLY_PARAMETER_NAMES, 'title'];
  * repeatedly in practice — so memory states what its own `title` is.
  */
 const MEMORY_PARAMETER_OVERRIDES = {
-  title: { type: 'string', description: "The memory's title, exactly as the session index lists it. Use this to read an entry you can already see; use memoryId only when a result gave you one" },
-  scope: { type: 'string', enum: ['global', 'project', 'both'], description: 'global is about the user and applies everywhere; project is about this codebase. Required for memory.save and memory.delete. Optional for memory.read and memory.list, which search both stores when it is omitted' },
+  title: { type: 'string', description: "Memory title as listed in the session index; use it to read an entry you already see — memoryId only when a result gave you one" },
+  scope: { type: 'string', enum: ['global', 'project', 'both'], description: 'global = about the user everywhere; project = this codebase. Required for save/delete; optional for read/list (omitted searches both)' },
 };
 
 const ALL_PARAMETER_PROPERTIES = {
@@ -54,14 +54,14 @@ const ALL_PARAMETER_PROPERTIES = {
   taskId: { type: 'string' },
   title: { type: 'string' },
   prompt: { type: 'string' },
-  model: { type: 'string', description: 'Model in provider/model format. When the user names no model: for session.create pick a suitable one from models.list favorites or recents (omit if there are none); for send and fork omit it — the session reuses its previous model' },
-  agent: { type: 'string', description: 'OpenCode agent name; new sessions default to the build agent and existing sessions keep their previous one. Set only when the user explicitly requests a different agent' },
-  variant: { type: 'string', description: 'Model variant; use only when the user explicitly requests it' },
-  worktree: { type: 'string', description: 'New worktree name for session.create. Omit by default; use only when the user explicitly asks for an isolated worktree. Uncommitted changes do not carry over into a new worktree' },
+  model: { type: 'string', description: 'Model as provider/model. If the user names none: create picks from models.list favorites/recents; send/fork omit — previous model reused' },
+  agent: { type: 'string', description: 'Agent name; new sessions default to build agent, existing keep theirs. Set only when explicitly requested' },
+  variant: { type: 'string', description: 'Model variant; only when the user explicitly requests it' },
+  worktree: { type: 'string', description: 'Worktree name for session.create; only when explicitly asked. Uncommitted changes do not carry over' },
   branch: { type: 'string', description: 'Branch name for the new worktree' },
   startRef: { type: 'string', description: 'Git ref used to create the new worktree' },
   setUpstream: { type: 'boolean', description: 'Make the new worktree branch track its upstream' },
-  goal: { type: 'boolean', description: 'Run the dispatched prompt in Goal Mode; use only when the user explicitly requests it' },
+  goal: { type: 'boolean', description: 'Run the prompt in Goal Mode; only when explicitly requested' },
   goalTokenBudget: { type: 'integer', minimum: 1000, maximum: 100_000_000, description: 'Goal token budget; requires goal' },
   wait: { type: 'boolean', description: 'Wait for current session activity to become idle. Omit by default; use only when the user asks or the next step requires the completed result' },
   timeout: { type: 'integer', minimum: 1, maximum: 86_400, description: 'Wait timeout in seconds (default 600); requires wait' },
@@ -87,10 +87,10 @@ const ALL_PARAMETER_PROPERTIES = {
   direction: { type: 'string', enum: ['up', 'down', 'top', 'bottom'], description: 'Scroll direction for browser.scroll' },
   viewport: { type: 'string', enum: ['mobile', 'tablet', 'desktop', 'fill'], description: 'Page layout size; snapshots report which one is in effect' },
   label: { type: 'string', description: 'Short name for a browser.capture image, such as before-fix' },
-  body: { type: 'string', description: 'Full text of the memory; state it so it still makes sense in a session that has none of this conversation' },
-  scope: { type: 'string', enum: ['global', 'project', 'both'], description: 'global is about the user and applies everywhere; project is about this codebase. both is only valid for memory.list' },
+  body: { type: 'string', description: 'Full memory text; must make sense without this conversation' },
+  scope: { type: 'string', enum: ['global', 'project', 'both'], description: 'global = user-wide; project = this codebase; both only for memory.list' },
   memoryId: { type: 'string', description: 'Memory ID from a memory.list or memory.read result' },
-  type: { type: 'string', enum: ['fact', 'preference', 'reference'], description: 'fact is something true, preference is how the user wants work done, reference points at a resource that is hard to find again' },
+  type: { type: 'string', enum: ['fact', 'preference', 'reference'], description: 'fact = true statement, preference = how user wants work done, reference = pointer hard to find again' },
 };
 
 const pickParameters = (names) => Object.fromEntries(
@@ -108,11 +108,11 @@ const MEMORY_PARAMETER_PROPERTIES = {
   ...MEMORY_PARAMETER_OVERRIDES,
 };
 
-const CONTROL_TOOL_DESCRIPTION = "Control OpenChamber projects, sessions, and scheduled tasks on the user's behalf. Sessions and scheduled tasks you create are for the user to follow and interact with; never use this tool to delegate parts of your own current task. Use one action per call. Scope with projectId or directory; omit both to use the current session directory. Session dispatches return immediately by default and you receive no notification when a dispatched session finishes, so never promise to report back on it; the user follows it in OpenChamber; a dispatched session needs no follow-up from you. If the user later asks how it went, use session.messages (add wait to block until it is idle, lastAssistant for just the final answer) — session.send always sends a NEW prompt and never just waits. Set wait only when the user asks or the next step requires the completed result. Session and worktree deletion are unavailable.";
+const CONTROL_TOOL_DESCRIPTION = "Control OpenChamber projects, sessions, and scheduled tasks on the user's behalf. Created sessions and tasks are user-facing work the user follows in OpenChamber; never use this tool to delegate parts of your own current task. Use one action per call. Scope with projectId or directory; omit both for the current session directory. Session dispatches return immediately by default with no completion notification, so never promise to report back on a dispatched session — it needs no follow-up from you. If the user later asks how it went, use session.messages (wait blocks until idle, lastAssistant returns just the final answer); session.send always sends a NEW prompt and never just waits. Set wait only when the user asks or the next step requires the completed result. Session and worktree deletion are unavailable.";
 
-const WEB_TOOL_DESCRIPTION = "Look at and interact with a web page in OpenChamber's browser panel, so you can check your own work rather than describing what you expect. Use one action per call. Open a page, snapshot it to read its text and its interactive elements, then click, type or scroll using the selectors the snapshot returned; snapshots also report any errors the page logged. Pass a selector to browser.snapshot to read one part of a long page. browser.inspect returns computed styles when the question is how something renders. Set viewport to check a layout at mobile, tablet or desktop size. The page runs with the user's real logins, so treat what you see as their live session.";
+const WEB_TOOL_DESCRIPTION = "Look at and interact with a web page in OpenChamber's browser panel to check your own work rather than describing what you expect. One action per call. Open a page, then snapshot to read its text and interactive elements; use the returned selectors for click/type/scroll. Snapshots also report page errors; pass selector to read just part of a long page. browser.inspect returns computed styles. Set viewport to check mobile, tablet or desktop layout. The page runs with the user's real logins: treat what you see as their live session.";
 
-const MEMORY_TOOL_DESCRIPTION = "Keep what you learn across sessions, so the user does not have to explain the same thing twice. Use one action per call. The session already lists the titles of what is stored. A title is an abbreviation, not the memory: read the entry with memory.read before acting on it, because titles leave out the conditions and exceptions that decide how the memory applies, and the ones that look self-explanatory hide them most often. Save something only when it will still be true in a later session — a stable preference, a project convention, a decision and its reason, or a hard-won pointer. Do not save one-off task state, anything you can read from the code, secrets or credentials, or anything the user asked you not to keep. Choose the scope deliberately: global is about the user and reaches every project, so put a project's conventions in project scope. What you save is shown to the user as unreviewed until they confirm it, so save plainly and say what you saved when it matters.";
+const MEMORY_TOOL_DESCRIPTION = "Keep what you learn across sessions, so the user does not have to explain the same thing twice. One action per call. The session already lists stored titles, but a title is not the memory: read the entry with memory.read before acting on it — titles leave out the conditions and exceptions that decide how a memory applies. Save only what stays true in later sessions: a stable preference, a project convention, a decision plus its reason, or a hard-won pointer. Never save one-off task state, anything readable from code, secrets, or anything the user asked you not to keep. Scope deliberately: global reaches every project; keep project conventions in project scope. Saves show as unreviewed until the user confirms them; save plainly and say what you saved when it matters.";
 
 const asNonEmptyString = (value) => {
   if (typeof value !== 'string') return null;
