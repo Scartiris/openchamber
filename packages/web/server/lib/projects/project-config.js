@@ -4,8 +4,11 @@ import parser from 'cron-parser';
 const PROJECT_CONFIG_VERSION = 1;
 export const MAX_TASK_NAME_LENGTH = 80;
 const MAX_TASK_PROMPT_LENGTH = 20_000;
+const MAX_TASK_COMMAND_LENGTH = 8_000;
 const MAX_CRON_LENGTH = 200;
 const MAX_LAST_ERROR_LENGTH = 2_000;
+const MAX_LAST_OUTPUT_LENGTH = 4_000;
+const EXECUTION_KINDS = new Set(['ai', 'script']);
 
 const asNonEmptyString = (value) => {
   if (typeof value !== 'string') {
@@ -208,7 +211,29 @@ const normalizeExecution = (value) => {
     throw new Error('execution is required');
   }
 
+  // Execution kind: "ai" dispatches a prompt into a new OpenCode session;
+  // "script" runs a local shell command server-side without any session or
+  // model call. Legacy tasks without a kind stay on the "ai" path.
+  const rawKind = asNonEmptyString(value.kind);
+  if (rawKind && !EXECUTION_KINDS.has(rawKind)) {
+    throw new Error('execution.kind must be "ai" or "script"');
+  }
+  const kind = rawKind ?? 'ai';
+
   const prompt = clampLength(asNonEmptyString(value.prompt) || '', MAX_TASK_PROMPT_LENGTH);
+
+  if (kind === 'script') {
+    const command = clampLength(asNonEmptyString(value.command) || '', MAX_TASK_COMMAND_LENGTH);
+    if (!command) {
+      throw new Error('execution.command is required for script execution');
+    }
+    return {
+      kind: 'script',
+      command,
+      ...(prompt ? { prompt } : {}),
+    };
+  }
+
   const providerID = asNonEmptyString(value.providerID);
   const modelID = asNonEmptyString(value.modelID);
   const variant = asNonEmptyString(value.variant);
@@ -232,6 +257,7 @@ const normalizeExecution = (value) => {
   }
 
   return {
+    kind: 'ai',
     prompt,
     providerID,
     modelID,
@@ -263,6 +289,15 @@ const normalizeState = (value, fallback) => {
   const lastSessionId = asNonEmptyString(source.lastSessionId);
   const lastErrorRaw = asNonEmptyString(source.lastError);
   const lastError = lastErrorRaw ? clampLength(lastErrorRaw, MAX_LAST_ERROR_LENGTH) : undefined;
+  // Script-run bookkeeping: captured combined output and process exit code.
+  // An explicit undefined in a state patch clears the stored value.
+  const lastOutputRaw = typeof source.lastOutput === 'string' ? source.lastOutput : '';
+  const lastOutput = lastOutputRaw.trim().length > 0
+    ? clampLength(lastOutputRaw, MAX_LAST_OUTPUT_LENGTH)
+    : undefined;
+  const lastExitCode = typeof source.lastExitCode === 'number' && Number.isFinite(source.lastExitCode)
+    ? Math.round(source.lastExitCode)
+    : undefined;
 
   return {
     createdAt: typeof source.createdAt === 'number' && Number.isFinite(source.createdAt)
@@ -278,6 +313,8 @@ const normalizeState = (value, fallback) => {
     ...(typeof lastScheduledFor === 'number' ? { lastScheduledFor } : {}),
     ...(lastSessionId ? { lastSessionId } : {}),
     ...(lastError ? { lastError } : {}),
+    ...(typeof lastExitCode === 'number' ? { lastExitCode } : {}),
+    ...(lastOutput ? { lastOutput } : {}),
   };
 };
 

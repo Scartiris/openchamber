@@ -489,8 +489,19 @@ export function ScheduledTasksDialog() {
                 )}
               >
                 <div className="min-w-0">
-                  <div className="typography-ui-header truncate font-semibold text-foreground">
-                    {task.name}
+                  <div className="flex min-w-0 items-center gap-2">
+                    <div className="typography-ui-header truncate font-semibold text-foreground">
+                      {task.name}
+                    </div>
+                    {task.execution.kind === 'script' ? (
+                      <span
+                        className="inline-flex shrink-0 items-center gap-1 rounded border px-1.5 py-0.5 typography-micro text-muted-foreground"
+                        title={t('sessions.scheduledTasks.dialog.executionKind.scriptHint')}
+                      >
+                        <Icon name="terminal-box" className="h-3 w-3" />
+                        {t('sessions.scheduledTasks.dialog.executionKind.script')}
+                      </span>
+                    ) : null}
                   </div>
                   <div className="typography-micro truncate text-muted-foreground">
                     {formatSchedule(task, t)}
@@ -558,6 +569,25 @@ export function ScheduledTasksDialog() {
                     <Icon name="error-warning" className="mt-0.5 h-3.5 w-3.5 shrink-0" />
                     <span className="min-w-0 break-words">{task.state.lastError}</span>
                   </div>
+                ) : null}
+
+                {task.state?.lastOutput ? (
+                  <details className="mt-3 rounded-md border p-2 typography-micro" style={toneStyle('muted')}>
+                    <summary className="cursor-pointer select-none text-muted-foreground">
+                      {t('sessions.scheduledTasks.dialog.lastOutput.label')}
+                      {task.state.lastExitCode !== undefined ? (
+                        <span
+                          className="ml-2 font-medium"
+                          style={{ color: `var(--status-${task.state.lastExitCode === 0 ? 'success' : 'error'})` }}
+                        >
+                          exit {task.state.lastExitCode}
+                        </span>
+                      ) : null}
+                    </summary>
+                    <pre className="mt-2 max-h-48 overflow-y-auto whitespace-pre-wrap break-words font-mono text-foreground">
+                      {task.state.lastOutput}
+                    </pre>
+                  </details>
                 ) : null}
 
                 <div className="mt-4 flex flex-wrap items-center justify-between gap-2">

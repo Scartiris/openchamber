@@ -51,6 +51,104 @@ describe('project-config runtime', () => {
     }
   });
 
+  it('creates a script-kind task without provider or model fields', async () => {
+    const { runtime, cleanup } = await createRuntime();
+    try {
+      const result = await runtime.upsertScheduledTask('project-test', {
+        name: 'Health check',
+        enabled: true,
+        schedule: { kind: 'cron', cron: '0 */6 * * *', timezone: 'UTC' },
+        execution: { kind: 'script', command: 'echo ok' },
+      });
+
+      expect(result.task.execution).toMatchObject({ kind: 'script', command: 'echo ok' });
+      expect(result.task.execution.providerID).toBeUndefined();
+      expect(result.task.execution.modelID).toBeUndefined();
+    } finally {
+      await cleanup();
+    }
+  });
+
+  it('defaults legacy executions without a kind to the ai path', async () => {
+    const { runtime, cleanup } = await createRuntime();
+    try {
+      const result = await runtime.upsertScheduledTask('project-test', {
+        name: 'Legacy AI task',
+        enabled: true,
+        schedule: { kind: 'daily', time: '09:30', timezone: 'UTC' },
+        execution: {
+          prompt: 'Do the thing',
+          providerID: 'openai',
+          modelID: 'gpt-4.1',
+        },
+      });
+      expect(result.task.execution.kind).toBe('ai');
+    } finally {
+      await cleanup();
+    }
+  });
+
+  it('rejects script execution without a command', async () => {
+    const { runtime, cleanup } = await createRuntime();
+    try {
+      await expect(runtime.upsertScheduledTask('project-test', {
+        name: 'Broken script task',
+        enabled: true,
+        schedule: { kind: 'cron', cron: '0 */6 * * *', timezone: 'UTC' },
+        execution: { kind: 'script' },
+      })).rejects.toThrow(/execution\.command is required/);
+    } finally {
+      await cleanup();
+    }
+  });
+
+  it('rejects unknown execution kinds', async () => {
+    const { runtime, cleanup } = await createRuntime();
+    try {
+      await expect(runtime.upsertScheduledTask('project-test', {
+        name: 'Bad kind task',
+        enabled: true,
+        schedule: { kind: 'cron', cron: '0 */6 * * *', timezone: 'UTC' },
+        execution: { kind: 'shell', command: 'echo ok' },
+      })).rejects.toThrow(/execution\.kind/);
+    } finally {
+      await cleanup();
+    }
+  });
+
+  it('persists script-run output bookkeeping and clears it on an explicit reset patch', async () => {
+    const { runtime, cleanup } = await createRuntime();
+    try {
+      await runtime.upsertScheduledTask('project-test', {
+        name: 'Health check',
+        enabled: true,
+        schedule: { kind: 'cron', cron: '0 */6 * * *', timezone: 'UTC' },
+        execution: { kind: 'script', command: 'echo ok' },
+      });
+
+      await runtime.updateScheduledTaskState('project-test', 'task-fixed-id', {
+        lastStatus: 'error',
+        lastOutput: 'connection refused',
+        lastExitCode: 7,
+      });
+      let tasks = await runtime.listScheduledTasks('project-test');
+      expect(tasks[0].state.lastOutput).toBe('connection refused');
+      expect(tasks[0].state.lastExitCode).toBe(7);
+
+      await runtime.updateScheduledTaskState('project-test', 'task-fixed-id', {
+        lastStatus: 'success',
+        lastOutput: undefined,
+        lastExitCode: undefined,
+      });
+      tasks = await runtime.listScheduledTasks('project-test');
+      expect(tasks[0].state.lastStatus).toBe('success');
+      expect(tasks[0].state.lastOutput).toBeUndefined();
+      expect(tasks[0].state.lastExitCode).toBeUndefined();
+    } finally {
+      await cleanup();
+    }
+  });
+
   it('rejects invalid cron expressions', async () => {
     const { runtime, cleanup } = await createRuntime();
     try {

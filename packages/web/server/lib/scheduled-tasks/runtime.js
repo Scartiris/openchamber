@@ -1,3 +1,4 @@
+import { spawn } from 'node:child_process';
 import { createOpencodeClient } from '@opencode-ai/sdk/v2';
 import { DateTime } from 'luxon';
 import parser from 'cron-parser';
@@ -12,8 +13,72 @@ const JITTER_MAX_MS = 2_000;
 const TASK_TITLE_MAX_LENGTH = 120;
 const TASK_DUE_SLACK_MS = 5_000;
 const MAX_TIMER_DELAY_MS = 2_147_483_647;
+const SCRIPT_OUTPUT_MAX_CHARS = 4_000;
 
 const buildTaskKey = (projectID, taskID) => `${projectID}:${taskID}`;
+
+const executeScriptCommand = (command, { cwd, timeoutMs }) => new Promise((resolve) => {
+  const useWindowsShell = process.platform === 'win32';
+  const child = spawn(
+    useWindowsShell ? 'cmd.exe' : 'bash',
+    useWindowsShell ? ['/d', '/s', '/c', command] : ['-lc', command],
+    { cwd, detached: !useWindowsShell },
+  );
+
+  let output = '';
+  let truncated = false;
+  let timedOut = false;
+
+  const appendOutput = (chunk) => {
+    if (output.length >= SCRIPT_OUTPUT_MAX_CHARS) {
+      truncated = true;
+      return;
+    }
+    output += chunk.toString();
+    if (output.length > SCRIPT_OUTPUT_MAX_CHARS) {
+      output = output.slice(0, SCRIPT_OUTPUT_MAX_CHARS);
+      truncated = true;
+    }
+  };
+
+  child.stdout?.on('data', appendOutput);
+  child.stderr?.on('data', appendOutput);
+
+  const timer = setTimeout(() => {
+    timedOut = true;
+    try {
+      if (!useWindowsShell && child.pid) {
+        process.kill(-child.pid, 'SIGKILL');
+      } else {
+        child.kill('SIGKILL');
+      }
+    } catch {
+      child.kill('SIGKILL');
+    }
+  }, Math.max(1_000, timeoutMs));
+
+  const finish = (exitCode, extraNote = '') => {
+    clearTimeout(timer);
+    const notes = [
+      ...(truncated ? ['[output truncated]'] : []),
+      ...(timedOut ? ['[timed out]'] : []),
+      ...(!timedOut && extraNote ? [extraNote] : []),
+    ];
+    resolve({
+      output: `${output}${notes.length > 0 ? `\n${notes.join(' ')}` : ''}`.trim(),
+      exitCode,
+    });
+  };
+
+  child.on('error', (error) => {
+    appendOutput(`\n${error.message}`);
+    finish(-1);
+  });
+
+  child.on('close', (code) => {
+    finish(timedOut ? -1 : (typeof code === 'number' ? code : -1));
+  });
+});
 
 const parseTimeParts = (time) => {
   const match = /^([01]\d|2[0-3]):([0-5]\d)$/.exec(typeof time === 'string' ? time : '');
@@ -538,7 +603,37 @@ export const createScheduledTasksRuntime = (deps) => {
 
   };
 
+  // Script-kind tasks run a local shell command directly: no OpenCode session,
+  // no prompt dispatch, no model tokens. The command runs in the project
+  // directory; output and exit code land in the task state for the UI.
+  const runScriptWithWatchdog = async (projectID, task, reason) => {
+    const startedAt = Date.now();
+    const projectPath = projectPathByID.get(projectID);
+    if (!projectPath) {
+      throw new Error('project path is unavailable');
+    }
+
+    const result = await executeScriptCommand(task.execution.command, {
+      cwd: projectPath,
+      timeoutMs: maxRunDurationMs,
+    });
+
+    const finishedAt = Date.now();
+    return {
+      sessionID: undefined,
+      durationMs: Math.max(0, finishedAt - startedAt),
+      reason,
+      startedAt,
+      finishedAt,
+      output: result.output,
+      exitCode: result.exitCode,
+    };
+  };
+
   const runTaskWithWatchdog = async (projectID, task, reason) => {
+    if (task.execution.kind === 'script') {
+      return runScriptWithWatchdog(projectID, task, reason);
+    }
     const startedAt = Date.now();
     const title = formatScheduledSessionTitle(task, startedAt);
     const projectPath = projectPathByID.get(projectID);
@@ -849,6 +944,8 @@ export const createScheduledTasksRuntime = (deps) => {
       let sessionID;
       let durationMs = 0;
       let errorMessage;
+      let scriptOutput;
+      let scriptExitCode;
 
       try {
         const runPromise = runTaskWithWatchdog(projectID, task, reason);
@@ -866,7 +963,14 @@ export const createScheduledTasksRuntime = (deps) => {
         });
         sessionID = result.sessionID;
         durationMs = result.durationMs;
-        status = 'success';
+        if (typeof result.exitCode === 'number') {
+          scriptExitCode = result.exitCode;
+          scriptOutput = typeof result.output === 'string' && result.output.length > 0 ? result.output : undefined;
+          if (scriptExitCode !== 0) {
+            status = 'error';
+            errorMessage = `script exited with code ${scriptExitCode}`;
+          }
+        }
         logger.info?.(
           '[ScheduledTasks] run completed',
           { projectID, taskID, status, reason, sessionID, durationMs }
@@ -913,6 +1017,10 @@ export const createScheduledTasksRuntime = (deps) => {
         lastDurationMs: durationMs,
         lastError: status === 'error' ? errorMessage : undefined,
         lastSessionId: status === 'success' ? sessionID : undefined,
+        // Script-run bookkeeping. Always present so a fresh run replaces (or
+        // clears) the previous output/exit code instead of leaving stale data.
+        lastOutput: scriptOutput,
+        lastExitCode: scriptExitCode,
         nextRunAt: Number.isFinite(nextRunAt) ? nextRunAt : undefined,
         updatedAt: finishedAt,
       };
@@ -950,6 +1058,8 @@ export const createScheduledTasksRuntime = (deps) => {
             lastDurationMs: durationMs,
             lastError: status === 'error' ? errorMessage : undefined,
             lastSessionId: status === 'success' ? sessionID : undefined,
+            lastOutput: scriptOutput,
+            lastExitCode: scriptExitCode,
             nextRunAt: Number.isFinite(nextRunAt) ? nextRunAt : undefined,
             updatedAt: finishedAt,
           },

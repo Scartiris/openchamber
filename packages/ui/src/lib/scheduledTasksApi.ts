@@ -2,6 +2,8 @@ import { runtimeFetch } from './runtime-fetch';
 
 export type ScheduledTaskStatus = 'idle' | 'running' | 'success' | 'error';
 
+export type ScheduledTaskExecutionKind = 'ai' | 'script';
+
 export type ScheduledTask = {
   id: string;
   name: string;
@@ -19,14 +21,21 @@ export type ScheduledTask = {
     timezone?: string;
   };
   execution: {
-    prompt: string;
-    providerID: string;
-    modelID: string;
+    /** "ai" dispatches a prompt into a new OpenCode session; "script" runs a
+     *  local shell command server-side with no session and no model tokens.
+     *  Legacy tasks may omit the kind (treated as "ai"). */
+    kind?: ScheduledTaskExecutionKind;
+    /** AI-kind payload; absent on script-kind tasks. */
+    prompt?: string;
+    providerID?: string;
+    modelID?: string;
     variant?: string;
     agent?: string;
     goalEnabled?: boolean;
     goalTokenBudget?: number;
     permissionAutoAccept?: boolean;
+    /** Script-kind payload. */
+    command?: string;
   };
   state: {
     createdAt: number;
@@ -37,6 +46,9 @@ export type ScheduledTask = {
     lastDurationMs?: number;
     lastSessionId?: string;
     nextRunAt?: number;
+    /** Script-kind bookkeeping from the most recent run. */
+    lastOutput?: string;
+    lastExitCode?: number;
   };
 };
 

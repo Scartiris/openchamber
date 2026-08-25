@@ -469,7 +469,9 @@ type ScheduledTaskDraft = {
     cronExpression: string;
   };
   execution: {
+    kind: 'ai' | 'script';
     prompt: string;
+    command: string;
     providerID: string;
     modelID: string;
     variant: string;
@@ -521,7 +523,9 @@ const toDraft = (
         cronExpression: '',
       },
       execution: {
+        kind: 'ai',
         prompt: '',
+        command: '',
         providerID: defaults.providerID,
         modelID: defaults.modelID,
         variant: defaults.variant,
@@ -557,9 +561,11 @@ const toDraft = (
         : '',
     },
     execution: {
-      prompt: task.execution.prompt,
-      providerID: task.execution.providerID,
-      modelID: task.execution.modelID,
+      kind: task.execution.kind === 'script' ? 'script' : 'ai',
+      prompt: task.execution.prompt || '',
+      command: task.execution.command || '',
+      providerID: task.execution.providerID || '',
+      modelID: task.execution.modelID || '',
       variant: task.execution.variant || '',
       agent: task.execution.agent || '',
       goalEnabled: task.execution.goalEnabled === true,
@@ -576,11 +582,17 @@ const validateDraft = (draft: ScheduledTaskDraft, t: ReturnType<typeof useI18n>[
   if (!draft.name.trim()) {
     return t('sessions.scheduledTasks.editor.validation.taskNameRequired');
   }
-  if (!draft.execution.prompt.trim()) {
-    return t('sessions.scheduledTasks.editor.validation.promptRequired');
-  }
-  if (!draft.execution.providerID.trim() || !draft.execution.modelID.trim()) {
-    return t('sessions.scheduledTasks.editor.validation.modelRequired');
+  if (draft.execution.kind === 'script') {
+    if (!draft.execution.command.trim()) {
+      return t('sessions.scheduledTasks.editor.validation.commandRequired');
+    }
+  } else {
+    if (!draft.execution.prompt.trim()) {
+      return t('sessions.scheduledTasks.editor.validation.promptRequired');
+    }
+    if (!draft.execution.providerID.trim() || !draft.execution.modelID.trim()) {
+      return t('sessions.scheduledTasks.editor.validation.modelRequired');
+    }
   }
 
   if (draft.schedule.kind === 'once') {
@@ -1166,18 +1178,24 @@ export function ScheduledTaskEditorDialog(props: {
                 ...(draft.schedule.kind === 'weekly' ? { weekdays: draft.schedule.weekdays } : {}),
               }),
       },
-      execution: {
-        prompt: draft.execution.prompt,
-        providerID: draft.execution.providerID,
-        modelID: draft.execution.modelID,
-        ...(draft.execution.variant.trim() ? { variant: draft.execution.variant.trim() } : {}),
-        ...(draft.execution.agent.trim() ? { agent: draft.execution.agent.trim() } : {}),
-        ...(draft.execution.permissionAutoAccept ? { permissionAutoAccept: true } : {}),
-        ...(draft.execution.goalEnabled ? { goalEnabled: true } : {}),
-        ...(draft.execution.goalEnabled && draft.execution.goalTokenBudget
-          ? { goalTokenBudget: draft.execution.goalTokenBudget }
-          : {}),
-      },
+      execution: draft.execution.kind === 'script'
+        ? {
+            kind: 'script' as const,
+            command: draft.execution.command,
+          }
+        : {
+            kind: 'ai' as const,
+            prompt: draft.execution.prompt,
+            providerID: draft.execution.providerID,
+            modelID: draft.execution.modelID,
+            ...(draft.execution.variant.trim() ? { variant: draft.execution.variant.trim() } : {}),
+            ...(draft.execution.agent.trim() ? { agent: draft.execution.agent.trim() } : {}),
+            ...(draft.execution.permissionAutoAccept ? { permissionAutoAccept: true } : {}),
+            ...(draft.execution.goalEnabled ? { goalEnabled: true } : {}),
+            ...(draft.execution.goalEnabled && draft.execution.goalTokenBudget
+              ? { goalTokenBudget: draft.execution.goalTokenBudget }
+              : {}),
+          },
       ...(draft.state ? { state: draft.state } : {}),
     };
 
@@ -1496,6 +1514,32 @@ export function ScheduledTaskEditorDialog(props: {
             </div>
           )}
 
+          <div className="flex flex-col gap-1">
+            <FieldLabel>{t('sessions.scheduledTasks.editor.executionKind.label')}</FieldLabel>
+            <Select
+              value={draft.execution.kind}
+              onValueChange={(value) => {
+                setDraft((prev) => ({
+                  ...prev,
+                  execution: { ...prev.execution, kind: value === 'script' ? 'script' : 'ai' },
+                }));
+              }}
+            >
+              <SelectTrigger size="lg" className="w-fit max-w-full"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="ai">{t('sessions.scheduledTasks.editor.executionKind.ai')}</SelectItem>
+                <SelectItem value="script">{t('sessions.scheduledTasks.editor.executionKind.script')}</SelectItem>
+              </SelectContent>
+            </Select>
+            <p className="typography-micro text-muted-foreground">
+              {draft.execution.kind === 'script'
+                ? t('sessions.scheduledTasks.editor.executionKind.scriptHint')
+                : t('sessions.scheduledTasks.editor.executionKind.aiHint')}
+            </p>
+          </div>
+
+          {draft.execution.kind === 'ai' ? (
+          <>
           <div className="grid grid-cols-1 gap-x-4 gap-y-3 sm:grid-cols-2">
             <div className="flex min-w-0 flex-col gap-1">
               <FieldLabel required>{t('sessions.scheduledTasks.editor.model.label')}</FieldLabel>
@@ -1664,6 +1708,23 @@ export function ScheduledTaskEditorDialog(props: {
             ) : null}
           </div>
           ) : null}
+          </>
+          ) : (
+            <div className="flex flex-col gap-1">
+              <FieldLabel htmlFor="sched-command" required>{t('sessions.scheduledTasks.editor.command.label')}</FieldLabel>
+              <Textarea
+                id="sched-command"
+                value={draft.execution.command}
+                onChange={(event) => setDraft((prev) => ({
+                  ...prev,
+                  execution: { ...prev.execution, command: event.target.value },
+                }))}
+                rows={6}
+                placeholder={t('sessions.scheduledTasks.editor.command.placeholder')}
+                className="typography-meta min-h-[100px] max-h-[260px] resize-none overflow-y-auto font-mono"
+              />
+            </div>
+          )}
     </div>
   );
 
@@ -1679,6 +1740,7 @@ export function ScheduledTaskEditorDialog(props: {
       </label>
 
       <div className="flex items-center gap-2">
+        {draft.execution.kind !== 'script' ? (
         <Tooltip>
           <TooltipTrigger asChild>
             <button
@@ -1700,6 +1762,8 @@ export function ScheduledTaskEditorDialog(props: {
           </TooltipTrigger>
           <TooltipContent side="top" sideOffset={6}>{t('sessions.scheduledTasks.editor.permissionAutoAccept.label')}</TooltipContent>
         </Tooltip>
+        ) : null}
+        {draft.execution.kind !== 'script' ? (
         <Tooltip>
           <TooltipTrigger asChild>
             <button
@@ -1721,6 +1785,7 @@ export function ScheduledTaskEditorDialog(props: {
           </TooltipTrigger>
           <TooltipContent side="top" sideOffset={6}>{t('sessions.scheduledTasks.editor.goal.label')}</TooltipContent>
         </Tooltip>
+        ) : null}
         <Button type="button" variant="ghost" size="sm" onClick={() => onOpenChange(false)} disabled={saving}>
           {t('sessions.scheduledTasks.editor.actions.cancel')}
         </Button>

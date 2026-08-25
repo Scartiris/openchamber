@@ -205,4 +205,67 @@ Run daily.
       await cleanup();
     }
   });
+
+  it('runs script-kind tasks without creating a session and records output and exit code', async () => {
+    const { tempRoot, repoPath, cleanup } = await createTempProject();
+    try {
+      const projectConfigRuntime = await createProjectConfig(tempRoot);
+      await projectConfigRuntime.upsertScheduledTask('proj', {
+        name: 'Health check',
+        enabled: true,
+        schedule: { kind: 'cron', cron: '0 */6 * * *', timezone: 'UTC' },
+        execution: { kind: 'script', command: 'echo hello-from-script' },
+      });
+
+      const runtime = createScheduledTasksRuntime({
+        ...createRuntimeDeps(),
+        projectConfigRuntime,
+        listProjects: async () => [{ id: 'proj', path: repoPath }],
+      });
+      await runtime.syncProject('proj');
+
+      const result = await runtime.runNow('proj', 'task-fixed-id');
+      expect(result.ok).toBe(true);
+      expect(result.sessionID).toBeUndefined();
+
+      const tasks = await projectConfigRuntime.listScheduledTasks('proj');
+      expect(tasks[0].state.lastStatus).toBe('success');
+      expect(tasks[0].state.lastExitCode).toBe(0);
+      expect(tasks[0].state.lastOutput).toBe('hello-from-script');
+    } finally {
+      await cleanup();
+    }
+  });
+
+  it('marks a failing script run as error while keeping its captured output', async () => {
+    const { tempRoot, repoPath, cleanup } = await createTempProject();
+    try {
+      const projectConfigRuntime = await createProjectConfig(tempRoot);
+      await projectConfigRuntime.upsertScheduledTask('proj', {
+        name: 'Failing check',
+        enabled: true,
+        schedule: { kind: 'cron', cron: '0 */6 * * *', timezone: 'UTC' },
+        execution: { kind: 'script', command: 'echo boom >&2; exit 3' },
+      });
+
+      const runtime = createScheduledTasksRuntime({
+        ...createRuntimeDeps(),
+        projectConfigRuntime,
+        listProjects: async () => [{ id: 'proj', path: repoPath }],
+      });
+      await runtime.syncProject('proj');
+
+      const result = await runtime.runNow('proj', 'task-fixed-id');
+      expect(result.ok).toBe(false);
+
+      const tasks = await projectConfigRuntime.listScheduledTasks('proj');
+      expect(tasks[0].state.lastStatus).toBe('error');
+      expect(tasks[0].state.lastExitCode).toBe(3);
+      expect(tasks[0].state.lastOutput).toContain('boom');
+      expect(tasks[0].state.lastError).toContain('code 3');
+      expect(tasks[0].state.lastSessionId).toBeUndefined();
+    } finally {
+      await cleanup();
+    }
+  });
 });
