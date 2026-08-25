@@ -1,5 +1,7 @@
 import { registerFsRoutes } from '../fs/routes.js';
 import { registerQuotaRoutes } from '../quota/routes.js';
+import { registerUsageStatsRoutes } from '../usage-stats/routes.js';
+import { createUsageStatsService } from '../usage-stats/aggregator.js';
 import { registerSmallModelRoutes } from '../small-model/routes.js';
 import { registerWalkthroughRoutes } from '../walkthrough/routes.js';
 import { registerSessionGoalRoutes } from '../session-goal/routes.js';
@@ -132,6 +134,12 @@ export const createFeatureRoutesRuntime = (dependencies) => {
       emitSessionCreatedEvent,
       permissionAutoAcceptRuntime,
     } = routeDependencies;
+
+    const usageStatsService = createUsageStatsService({
+      buildOpenCodeUrl,
+      getOpenCodeAuthHeaders,
+      waitForOpenCodeReady,
+    });
 
     registerSettingsUtilityRoutes(app, {
       readCustomThemesFromDisk,
@@ -296,6 +304,9 @@ export const createFeatureRoutesRuntime = (dependencies) => {
     });
 
     registerQuotaRoutes(app, { getQuotaProviders });
+    registerUsageStatsRoutes(app, {
+      getUsageStatsService: usageStatsService,
+    });
     registerSmallModelRoutes(app, { getSmallModelService });
     registerWalkthroughRoutes(app, { getWalkthroughService });
     registerSessionGoalRoutes(app);

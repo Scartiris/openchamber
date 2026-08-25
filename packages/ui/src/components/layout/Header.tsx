@@ -36,6 +36,7 @@ import { useGitHubAuthStore } from '@/stores/useGitHubAuthStore';
 import { useRuntimeAPIs } from '@/hooks/useRuntimeAPIs';
 import { useDesktopWindowControlsLayout } from '@/hooks/useDesktopWindowControlsLayout';
 import { ContextUsageDisplay } from '@/components/ui/ContextUsageDisplay';
+import { TokenUsageButton } from '@/components/layout/TokenUsageButton';
 import { WindowsWindowControls } from '@/components/desktop/WindowsWindowControls';
 import { UpdateDialog } from '@/components/ui/UpdateDialog';
 import { useDeviceInfo, useTabletStandalonePwaRuntime } from '@/lib/device';
@@ -2122,6 +2123,8 @@ export const Header: React.FC<HeaderProps> = ({
               percentIconClassName="h-4.5 w-4.5"
             />
           ) : null}
+
+          <TokenUsageButton className={showMiniChatHeaderAction ? 'mr-1' : 'mr-1.5'} />
 
           <HeaderIconActionButton
             visible={showMiniChatHeaderAction}

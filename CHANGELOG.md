@@ -4,6 +4,11 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [1.20.101] - 2026-08-25
+
+- **Token usage statistics:** a new titlebar button shows today's total token consumption at a glance; the dialog breaks usage down by day and by model, grouped by provider, across input / output / reasoning / cache read / cache write plus cost, with today / 7-day / 30-day ranges.
+- **Server:** new `/api/token-stats` endpoint aggregates assistant-message tokens from OpenCode sessions with window-bounded pagination and a short-lived cache.
+
 ## [1.20.100] - 2026-08-24
 
 - **Fork release:** first Scartiris fork build, based on upstream v1.20.0.
