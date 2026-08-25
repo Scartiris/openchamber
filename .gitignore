@@ -73,3 +73,12 @@ workspaces/
 .maintenance-clone
 test-results/
 artifacts/
+
+# Fork-local secrets guard (never commit credentials)
+git-credentials
+github-token
+*.token
+*.pem
+*.key
+.env.local
+token-stats-history.json
