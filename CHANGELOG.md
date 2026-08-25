@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [1.20.105] - 2026-08-26
+
+- **Updater fix:** mark the GitHub feed as `private` so the embedded token is actually sent — private-repo checks no longer 404; combined with the 1.20.103 token, auto-updates from private releases now work end-to-end.
+
 ## [1.20.104] - 2026-08-25
 
 - **i18n/zh-CN:** tool call cards now show Chinese display names (Read File, Shell Command, etc.) and common summaries via `chat.toolName.*` and `chat.toolPart.*` keys, removing the last large block of untranslated UI in everyday workflows.

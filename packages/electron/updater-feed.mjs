@@ -4,6 +4,7 @@ export const PRODUCTION_UPDATER_FEED = Object.freeze({
   provider: 'github',
   owner: 'Scartiris',
   repo: 'openchamber',
+  private: true,
 });
 
 const isLoopbackHostname = (hostname) => {

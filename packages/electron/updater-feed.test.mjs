@@ -18,6 +18,7 @@ test('production updater feed is immutable GitHub configuration', () => {
     provider: 'github',
     owner: 'Scartiris',
     repo: 'openchamber',
+    private: true,
   });
 });
 
