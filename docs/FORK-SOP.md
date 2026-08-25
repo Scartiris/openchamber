@@ -9,7 +9,7 @@
 ## 桌面端更新通道
 
 - Windows 客户端自动更新源 = `Scartiris/openchamber` 的 Releases（改于 `packages/electron/updater-feed.mjs`）
-- 两台 PC（赤峰家里 / 单位）装过 fork 包后即永久走此通道
+- 两台 PC 装过 fork 包后即永久走此通道
 - **版本号策略**：patch 位从 100 起步（v1.20.100 → v1.21.100 …），保证高于同版官方且不带 `-` 后缀
   （带 `-` 会被 electron-updater 当 prerelease 过滤；客户端 allowPrerelease=false）
 
