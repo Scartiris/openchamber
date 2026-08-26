@@ -1,4 +1,7 @@
 # syntax=docker/dockerfile:1
+# NOTE: pigeon production images MUST be built via GHCR workflow
+# (.github/workflows/docker.yml), never via `docker commit`.
+# The 6.7 GB commit layer on old pigeon images is the reason for bloat.
 FROM oven/bun:1.3.14 AS base
 WORKDIR /app
 

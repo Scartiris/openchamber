@@ -21,6 +21,11 @@ pnpm-debug.log*
 .opencode
 data
 workspaces
+# pigeon: local runtime and backups — never baked into image
+packages/web.bak-*
+.host
+apps
+node-mesh
 packages/desktop/src-tauri
 packages/desktop/target
 packages/intellij
