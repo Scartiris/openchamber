@@ -225,13 +225,16 @@ export const TokenUsageButton: React.FC<{ className?: string }> = ({ className }
     const [range, setRange] = useState<TokenStatsRange>('7');
     const [view, setView] = useState<'daily' | 'models'>('daily');
     // Poll while mounted so the titlebar figure stays fresh; the server caches
-    // for 60s so this stays cheap.
+    // for 30s so this stays cheap.
     const stats = useTokenStats(range, true);
 
     useEffect(() => {
-        if (!open) return;
-        const timer = window.setInterval(() => stats.refresh(), 60_000);
+        const timer = window.setInterval(() => stats.refresh(), 30_000);
         return () => window.clearInterval(timer);
+    }, [stats.refresh]);
+
+    useEffect(() => {
+        if (open) stats.refresh();
     }, [open, stats.refresh]);
 
     const todayTotal = stats.data?.today.tokens.total ?? 0;

@@ -11,7 +11,7 @@ const COLLECT_DEADLINE_MS = 90_000;
 
 export const USAGE_STATS_MIN_DAYS = 1;
 export const USAGE_STATS_MAX_DAYS = 90;
-export const TODAY_CACHE_TTL_MS = 60_000;
+export const TODAY_CACHE_TTL_MS = 30_000;
 export const HISTORY_DISK_FILENAME = 'token-stats-history.json';
 
 export const clampStatsDays = (value) => {
