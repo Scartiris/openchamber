@@ -13,6 +13,7 @@ import { WorkStatusTasksSection } from './WorkStatusTasksSection';
 import { WorkStatusMcpSection } from './WorkStatusMcpSection';
 import { WorkStatusPinnedSection } from './WorkStatusPinnedSection';
 import { WorkStatusContextSection } from './WorkStatusContextSection';
+import { WorkStatusMemorySection } from './WorkStatusMemorySection';
 import { WorkStatusSectionsDialog } from './WorkStatusSectionsDialog';
 import {
   areAllWorkStatusSectionsHidden,
@@ -259,6 +260,7 @@ export const WorkStatusPanel: React.FC<Props> = ({ sessionId, directory, visible
         {sectionVisible('mcp') ? <WorkStatusMcpSection directory={directory} /> : null}
         {sectionVisible('pinned') ? <WorkStatusPinnedSection sessionId={sessionId} directory={directory} /> : null}
         {sectionVisible('contextSources') ? <WorkStatusContextSection sessionId={sessionId} directory={directory} /> : null}
+        {sectionVisible('memoryTools') ? <WorkStatusMemorySection sessionId={sessionId} directory={directory} /> : null}
       </ScrollShadow>
       </WorkStatusPresenceProvider>
       ) : null}

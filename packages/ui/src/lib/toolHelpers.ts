@@ -208,6 +208,30 @@ const TOOL_METADATA: Record<string, ToolMetadata> = {
       inputFields: []
     },
 
+    pigeon_memory: {
+      displayName: 'Pigeon Memory',
+      category: 'system',
+      outputLanguage: 'json',
+      inputFields: [
+        { key: 'action', label: 'Action', type: 'text' },
+        { key: 'title', label: 'Title', type: 'text' }
+      ]
+    },
+
+    pigeon_profile: {
+      displayName: 'Pigeon Profile',
+      category: 'system',
+      outputLanguage: 'json',
+      inputFields: []
+    },
+
+    pigeon_config: {
+      displayName: 'Pigeon Config',
+      category: 'system',
+      outputLanguage: 'json',
+      inputFields: []
+    },
+
     plan_enter: {
       displayName: 'Plan Mode',
       category: 'ai',

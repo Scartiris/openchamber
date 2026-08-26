@@ -62,6 +62,9 @@ export const getToolIcon = (toolName: string) => {
     if (tool === 'openchamber_memory') {
         return <Icon name="brain-4" className={iconClass} />;
     }
+    if (tool.startsWith('pigeon_')) {
+        return <Icon name="brain-ai-3" className={iconClass} />;
+    }
     if (tool === 'question') {
         return <Icon name="survey" className={iconClass} />;
     }

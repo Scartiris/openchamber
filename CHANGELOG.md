@@ -4,6 +4,11 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [1.20.106] - 2026-08-26
+
+- **i18n/zh-CN:** the shell tool card is now fully Chinese (终端命令), and personal-memory tools (pigeon_memory/profile/config) get proper Chinese titles and a brain icon instead of the generic fallback.
+- **Work status:** a new "Personal memory" section (after Context sources) lists this session's memory writes and recalls from pigeon tools, with per-entry write/recall badges; hidden by default only if you hide it in section settings.
+
 ## [1.20.105] - 2026-08-26
 
 - **Updater fix:** mark the GitHub feed as `private` so the embedded token is actually sent — private-repo checks no longer 404; combined with the 1.20.103 token, auto-updates from private releases now work end-to-end.

@@ -19,6 +19,7 @@ export const WORK_STATUS_SECTION_IDS = [
   'mcp',
   'pinned',
   'contextSources',
+  'memoryTools',
 ] as const;
 
 type WorkStatusSectionId = (typeof WORK_STATUS_SECTION_IDS)[number];
@@ -32,6 +33,7 @@ export const WORK_STATUS_SECTION_LABEL_KEYS: Record<WorkStatusSectionId, I18nKey
   mcp: 'chat.workStatus.section.mcp',
   pinned: 'chat.workStatus.section.pinned',
   contextSources: 'chat.workStatus.section.contextBreakdown',
+  memoryTools: 'chat.workStatus.section.memoryTools',
 };
 
 const KNOWN_IDS = new Set<string>(WORK_STATUS_SECTION_IDS);
