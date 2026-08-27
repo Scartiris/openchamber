@@ -36,6 +36,7 @@ import { getGitHubPrStatusKey, usePrVisualSummary } from '@/stores/useGitHubPrSt
 import { useSessionUnseenCount } from '@/sync/notification-store';
 import { useHasSessionActivityDuration } from '@/sync/session-activity-timing';
 import { SessionActivityDuration } from '@/components/session/SessionActivityDuration';
+import { SessionOutputRate } from '@/components/session/SessionOutputRate';
 import { useSessionMultiSelectStore } from '@/stores/useSessionMultiSelectStore';
 import { useI18n } from '@/lib/i18n';
 import { useShiftKeyHeld } from '@/hooks/useShiftKeyHeld';
@@ -1295,6 +1296,8 @@ function SessionNodeItemComponent(props: Props): React.ReactNode {
                           </span>
                         </div>
                       ) : null}
+                      {/* Separate rate column - only when streaming, hides otherwise */}
+                      <SessionOutputRate sessionId={session.id} directory={sessionDirectory} className="ml-1 text-[0.72rem]" />
                       {pendingPermissionCount > 0 ? (
                         <span className="inline-flex items-center gap-1 rounded bg-destructive/10 px-1 py-0.5 text-[0.7rem] text-destructive flex-shrink-0" title={t('sessions.sidebar.session.status.permissionRequired')} aria-label={t('sessions.sidebar.session.status.permissionRequired')}>
                           <Icon name="shield" className="h-3 w-3" />

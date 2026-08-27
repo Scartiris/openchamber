@@ -11,7 +11,6 @@ type TokenizerInstance = {
   // We'll handle both shapes defensively.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   (text: string, opts?: any): Promise<any>;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   encode?: (text: string) => number[];
 };
 
@@ -19,6 +18,8 @@ let tokenizerInstance: TokenizerInstance | null = null;
 let tokenizerPromise: Promise<TokenizerInstance | null> | null = null;
 let tokenizerError: string | null = null;
 let tokenizerModelId: string | null = null;
+let tokenizerLoadAbort: AbortController | null = null;
+let tokenizerDesiredIdForPromise: string | null = null;
 
 // Map provider/model hints to closest Xenova tokenizer
 const MODEL_TOKENIZER_MAP: Record<string, string> = {
@@ -62,19 +63,31 @@ export const loadTokenizer = async (
   if (tokenizerInstance && tokenizerModelId === desiredId) {
     return tokenizerInstance;
   }
-  if (tokenizerPromise && tokenizerModelId === desiredId) {
+  if (tokenizerPromise && tokenizerDesiredIdForPromise === desiredId) {
     return tokenizerPromise;
   }
 
+  // abort previous load if model switched
+  if (tokenizerLoadAbort && tokenizerDesiredIdForPromise !== desiredId) {
+    try { tokenizerLoadAbort.abort(); } catch (_e) { void _e; }
+    tokenizerLoadAbort = null;
+  }
+  tokenizerLoadAbort = new AbortController();
+  const currentAbort = tokenizerLoadAbort;
+
   tokenizerModelId = desiredId;
+  tokenizerDesiredIdForPromise = desiredId;
   tokenizerError = null;
   tokenizerPromise = (async () => {
     try {
+      if (currentAbort.signal.aborted) return null;
       // Dynamic import to avoid bundling ONNX runtime until needed
       const mod = await import('@xenova/transformers');
+      if (currentAbort.signal.aborted) return null;
       // Some builds export AutoTokenizer as named, some as default
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- dynamic transformers shape
       const AutoTokenizer = (mod as unknown as { AutoTokenizer: any }).AutoTokenizer
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- dynamic transformers shape
         ?? (mod as unknown as { default: { AutoTokenizer: any } }).default?.AutoTokenizer;
       if (!AutoTokenizer) {
         throw new Error('AutoTokenizer not found in @xenova/transformers');
@@ -229,4 +242,9 @@ export const __resetTokenizerForTests = (): void => {
   tokenizerPromise = null;
   tokenizerError = null;
   tokenizerModelId = null;
+  tokenizerDesiredIdForPromise = null;
+  if (tokenizerLoadAbort) {
+    try { tokenizerLoadAbort.abort(); } catch (_e) { void _e; }
+    tokenizerLoadAbort = null;
+  }
 };

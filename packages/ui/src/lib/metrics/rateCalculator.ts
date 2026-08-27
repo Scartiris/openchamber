@@ -27,18 +27,15 @@ export const computeInstantTokensPerSec = (
   if (samples.length < 2) return null;
   if (windowMs <= 0) return null;
   const windowStart = now - windowMs;
-  // find earliest sample within window
-  let startIdx = 0;
+  // find earliest sample within window; if none inside, no instant value
+  let startIdx = -1;
   for (let i = 0; i < samples.length; i += 1) {
     if (samples[i].t >= windowStart) {
       startIdx = i;
       break;
     }
-    if (i === samples.length - 1) {
-      // all samples outside window – use last two
-      startIdx = Math.max(0, samples.length - 2);
-    }
   }
+  if (startIdx === -1) return null;
   const first = samples[startIdx];
   const last = samples[samples.length - 1];
   if (!first || !last || last.t <= first.t) return null;

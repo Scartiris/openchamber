@@ -89,7 +89,6 @@ export const ModelOutputRateSection: React.FC<Props> = ({ sessionId, sessionMess
 
   const hasAnyHistory = rate.history.length > 0;
   const showStreaming = rate.isStreaming;
-  const showIdleWithHistory = !showStreaming && hasAnyHistory;
 
   return (
     <div className="mb-5 rounded-lg bg-[var(--surface-elevated)]/70 px-4 py-3.5">

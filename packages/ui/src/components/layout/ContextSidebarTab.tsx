@@ -12,7 +12,6 @@ import { useSessions, useSessionMessageRecords } from '@/sync/sync-context';
 import { copyTextToClipboard } from '@/lib/clipboard';
 import { getCurrentIntlLocale, useI18n } from '@/lib/i18n';
 import { formatMoney } from '@/lib/money';
-import { ModelOutputRateSection } from './ModelOutputRateSection';
 import {
   derivePartsLabel,
   deriveUserSnippet,
@@ -427,9 +426,6 @@ export const ContextPanelContent: React.FC = () => {
             )}
           </div>
         </div>
-
-        {/* ── Model output rate (live tok/s) ── */}
-        <ModelOutputRateSection sessionId={currentSessionId} sessionMessages={sessionMessages} />
 
         {/* ── Context usage ── */}
         <div className="mb-5 rounded-lg bg-[var(--surface-elevated)]/70 px-4 py-3.5">
