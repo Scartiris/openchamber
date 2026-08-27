@@ -16,7 +16,6 @@ type TokenizerInstance = {
 
 let tokenizerInstance: TokenizerInstance | null = null;
 let tokenizerPromise: Promise<TokenizerInstance | null> | null = null;
-let tokenizerError: string | null = null;
 let tokenizerModelId: string | null = null;
 let tokenizerLoadAbort: AbortController | null = null;
 let tokenizerDesiredIdForPromise: string | null = null;
@@ -55,11 +54,10 @@ const estimateTokensByChars = (text: string): number => {
  * Load tokenizer for given provider/model (cached, coalesced).
  * Returns null on failure – caller should fallback.
  */
-export const loadTokenizer = async (
+const loadTokenizer = async (
   providerID?: string,
   modelID?: string,
-): Promise<TokenizerInstance | null> => {
-  const desiredId = resolveModelId(providerID, modelID);
+): Promise<TokenizerInstance | null> => {  const desiredId = resolveModelId(providerID, modelID);
   if (tokenizerInstance && tokenizerModelId === desiredId) {
     return tokenizerInstance;
   }
@@ -77,7 +75,6 @@ export const loadTokenizer = async (
 
   tokenizerModelId = desiredId;
   tokenizerDesiredIdForPromise = desiredId;
-  tokenizerError = null;
   tokenizerPromise = (async () => {
     try {
       if (currentAbort.signal.aborted) return null;
@@ -97,8 +94,6 @@ export const loadTokenizer = async (
       return tokenizerInstance;
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
-      tokenizerError = msg;
-      // allow retry after error by clearing promise (next call will retry same id, but we keep error for UI)
       // keep promise resolved to null so callers don't throw
       console.warn('[tokenizer] failed to load', desiredId, msg);
       tokenizerInstance = null;
@@ -108,10 +103,6 @@ export const loadTokenizer = async (
 
   return tokenizerPromise;
 };
-
-export const getTokenizerError = (): string | null => tokenizerError;
-export const isTokenizerReady = (): boolean => !!tokenizerInstance;
-export const getTokenizerModelId = (): string | null => tokenizerModelId;
 
 /**
  * Count tokens precisely when tokenizer is ready, otherwise fallback to chars/4.
@@ -155,31 +146,8 @@ export const countTokens = async (
 };
 
 /**
- * Sync attempt when tokenizer is already ready – used in hot path (250ms ticker)
- * Returns null if not ready, so caller can fallback synchronously.
+ * Extract the token id count from whatever shape the tokenizer returns.
  */
-export const tryCountTokensSync = (text: string): number | null => {
-  if (!tokenizerInstance || !text) return null;
-  try {
-    // Tokenizers in transformers.js expose encode(path) sync for some models?
-    // Prefer calling as function and reading dims synchronously is async, so we can't.
-    // We attempt to use encode if available (sync), otherwise return null to signal async needed.
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const maybeEncode = (tokenizerInstance as any).encode as ((t: string) => number[]) | undefined;
-    if (typeof maybeEncode === 'function') {
-      try {
-        const ids = maybeEncode.call(tokenizerInstance, text);
-        if (Array.isArray(ids)) return ids.length;
-      } catch {
-        // fall through
-      }
-    }
-    // No sync path – caller must use estimate for this tick, async will correct next tick
-    return null;
-  } catch {
-    return null;
-  }
-};
 
 const countWithTokenizer = async (
   tok: TokenizerInstance,
@@ -232,19 +200,4 @@ const countWithTokenizer = async (
  */
 export const warmTokenizer = (providerID?: string, modelID?: string): void => {
   void loadTokenizer(providerID, modelID);
-};
-
-/**
- * Reset for tests.
- */
-export const __resetTokenizerForTests = (): void => {
-  tokenizerInstance = null;
-  tokenizerPromise = null;
-  tokenizerError = null;
-  tokenizerModelId = null;
-  tokenizerDesiredIdForPromise = null;
-  if (tokenizerLoadAbort) {
-    try { tokenizerLoadAbort.abort(); } catch (_e) { void _e; }
-    tokenizerLoadAbort = null;
-  }
 };

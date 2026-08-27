@@ -55,41 +55,6 @@ export const computeCharsPerSec = (
   return totalChars / (elapsedMs / 1000);
 };
 
-export const formatRate = (
-  value: number | null,
-  fractionDigits: number = 1,
-): string => {
-  if (value === null || !Number.isFinite(value)) return '—';
-  return value.toFixed(fractionDigits);
-};
-
-export const formatTokensPerSec = (value: number | null): string => {
-  if (value === null || !Number.isFinite(value)) return '—';
-  return `${value.toFixed(1)} tok/s`;
-};
-
-export const formatCharsPerSec = (value: number | null): string => {
-  if (value === null || !Number.isFinite(value)) return '—';
-  return `${value.toFixed(0)} chars/s`;
-};
-
-export const computeHistoryAvg = (
-  rates: Array<number | null>,
-): number | null => {
-  const valid = rates.filter((v): v is number => typeof v === 'number' && Number.isFinite(v) && v > 0);
-  if (valid.length === 0) return null;
-  return valid.reduce((a, b) => a + b, 0) / valid.length;
-};
-
-/**
- * Decide display precision: small values show 1 decimal, large show 0.
- */
-export const toDisplayRate = (value: number | null): string => {
-  if (value === null || !Number.isFinite(value)) return '—';
-  if (value < 10) return value.toFixed(1);
-  return value.toFixed(0);
-};
-
 /**
  * Clamp samples to bounded size and window.
  */
