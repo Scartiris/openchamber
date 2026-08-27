@@ -21,7 +21,7 @@ import { useConfigStore } from '@/stores/useConfigStore';
 import { useSessionUIStore } from '@/sync/session-ui-store';
 import { useSessionWorktreeStore } from '@/sync/session-worktree-store';
 import { formatSessionWorktreeBadge } from '@/sync/session-worktree-contract';
-import { buildSessionMessageRecordsSnapshot, useDirectoryStore, useGlobalSessionStatus, useSessionMessagesResolved } from '@/sync/sync-context';
+import { buildSessionMessageRecordsSnapshot, useDirectoryStore, useGlobalSessionStatus, useSessionMessages, useSessionMessagesResolved } from '@/sync/sync-context';
 import { useDirectoryStore as useAppDirectoryStore } from '@/stores/useDirectoryStore';
 import { isChatDirectoryForHome } from '@/lib/chatDirectories';
 import { useSync } from '@/sync/use-sync';
@@ -619,7 +619,16 @@ export const Header: React.FC<HeaderProps> = ({
     : null;
   const contextLimit = (limit && typeof limit.context === 'number' ? limit.context : 0);
   const outputLimit = (limit && typeof limit.output === 'number' ? limit.output : 0);
-  const contextUsage = getContextUsage(contextLimit, outputLimit);
+  // `getContextUsage` is an imperative getter over the sync store's messages:
+  // its own subscription (the function reference) never changes, so without a
+  // real message subscription the readout only refreshed when an unrelated
+  // header render happened. Same pitfall the work-status panel already fixed.
+  const currentSessionMessages = useSessionMessages(currentSessionId ?? '');
+  const contextUsage = React.useMemo(
+    () => getContextUsage(contextLimit, outputLimit),
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- getter output tracks the session's message records, not its arguments
+    [currentSessionMessages, contextLimit, outputLimit, getContextUsage],
+  );
   const [stableDesktopContextUsage, setStableDesktopContextUsage] = React.useState<SessionContextUsage | null>(null);
   const isContextUsageResolvedForSession = !currentSessionId || currentSessionMessagesResolved;
 
