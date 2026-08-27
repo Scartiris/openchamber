@@ -18,6 +18,8 @@ interface ContextUsageDisplayProps {
   isMobile?: boolean;
   hideIcon?: boolean;
   showPercentIcon?: boolean;
+  /** Show "used / context limit" token counts next to the percent icon (desktop only, needs a known context limit). */
+  showTokenCounts?: boolean;
   className?: string;
   valueClassName?: string;
   percentIconClassName?: string;
@@ -36,6 +38,7 @@ export const ContextUsageDisplay: React.FC<ContextUsageDisplayProps> = ({
   isMobile = false,
   hideIcon = false,
   showPercentIcon = false,
+  showTokenCounts = false,
   className,
   valueClassName,
   percentIconClassName,
@@ -78,6 +81,8 @@ export const ContextUsageDisplay: React.FC<ContextUsageDisplayProps> = ({
   const safeOutputLimit = typeof outputLimit === 'number' ? Math.max(outputLimit, 0) : 0;
   const normalizedCost = cost ?? 0;
   const hasCost = normalizedCost > 0 && Number.isFinite(normalizedCost);
+  // Token counts make no sense against an unknown limit; fall back to percent-only.
+  const showTokenCountsWithLimit = showTokenCounts && contextLimit > 0;
   const tooltipLines = [
     t('contextUsage.tooltip.usedTokens', { tokens: formatTokens(totalTokens) }),
     t('contextUsage.tooltip.contextLimit', { tokens: formatTokens(contextLimit) }),
@@ -122,7 +127,15 @@ export const ContextUsageDisplay: React.FC<ContextUsageDisplayProps> = ({
                 className="transition-[stroke-dashoffset,stroke] duration-300"
               />
             </svg>
-            <span className="text-foreground">{Math.min(percentage, 999).toFixed(1)}%</span>
+            {showTokenCountsWithLimit ? (
+              <>
+                <span className="text-foreground">{formatTokens(totalTokens)}</span>
+                <span className="font-normal text-muted-foreground/70">/ {formatTokens(contextLimit)}</span>
+                <span className="font-normal text-muted-foreground">{Math.min(percentage, 999).toFixed(1)}%</span>
+              </>
+            ) : (
+              <span className="text-foreground">{Math.min(percentage, 999).toFixed(1)}%</span>
+            )}
           </>
         ) : (
           <>

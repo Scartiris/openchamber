@@ -2116,6 +2116,7 @@ export const Header: React.FC<HeaderProps> = ({
               size="compact"
               hideIcon
               showPercentIcon
+              showTokenCounts
               onClick={handleOpenContextPanel}
               pressed={isContextPanelActive}
               className={!showMiniChatHeaderAction ? 'mr-3.5' : ''}
