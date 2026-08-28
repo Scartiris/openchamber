@@ -5,13 +5,13 @@ import { createOpencodeClient } from '@opencode-ai/sdk/v2';
 const DAY_MS = 24 * 60 * 60 * 1000;
 const SESSION_PAGE_LIMIT = 200;
 const MESSAGE_PAGE_LIMIT = 100;
-const MAX_CONCURRENT_SESSIONS = 3;
-const MESSAGE_PAGE_DELAY_MS = 50;
+const MAX_CONCURRENT_SESSIONS = 10;
+const MESSAGE_PAGE_DELAY_MS = 5;
 const COLLECT_DEADLINE_MS = 90_000;
 
 export const USAGE_STATS_MIN_DAYS = 1;
 export const USAGE_STATS_MAX_DAYS = 90;
-export const TODAY_CACHE_TTL_MS = 30_000;
+export const TODAY_CACHE_TTL_MS = Number.parseInt(process.env.OPENCHAMBER_TOKEN_STATS_TTL_MS ?? '10000', 10) || 10_000;
 export const HISTORY_DISK_FILENAME = 'token-stats-history.json';
 
 export const clampStatsDays = (value) => {
@@ -366,7 +366,22 @@ export const createUsageStatsService = ({
 
   const loadToday = async (cutoff) => {
     const nowMs = now();
-    if (todayCache && todayCache.cutoff === cutoff && nowMs - todayCache.fetchedAt < TODAY_CACHE_TTL_MS) {
+    const isFresh = todayCache && todayCache.cutoff === cutoff && nowMs - todayCache.fetchedAt < TODAY_CACHE_TTL_MS;
+    if (isFresh) return todayCache.data;
+    // stale-while-revalidate: expired but have data -> serve stale instantly, refresh in background
+    if (todayCache && todayCache.cutoff === cutoff && todayCache.data) {
+      if (!todayPending) {
+        todayPending = (async () => {
+          try {
+            const data = await collectRange(cutoff, undefined, now() + COLLECT_DEADLINE_MS);
+            todayCache = { cutoff, fetchedAt: now(), data };
+            return data;
+          } finally {
+            todayPending = null;
+          }
+        })();
+        todayPending.catch(() => {});
+      }
       return todayCache.data;
     }
     if (todayPending) return todayPending;
@@ -403,11 +418,12 @@ export const createUsageStatsService = ({
     const todayCutoff = localMidnight(nowMs);
     const windowStart = rangeStartDate(days, nowMs);
 
-    const maps = [];
-    // Both branches walk bounded ranges: history is cutoff-bounded and cached,
-    // today's range is the live tail.
-    maps.push(await loadHistory(windowStart, todayCutoff));
-    maps.push(await loadToday(todayCutoff));
+    // history + today in parallel: history is disk/mem cached, today is 10s SWR -> both cheap
+    const [historyData, todayData] = await Promise.all([
+      loadHistory(windowStart, todayCutoff),
+      loadToday(todayCutoff),
+    ]);
+    const maps = [historyData, todayData];
 
     const byDay = mergeByDayMaps(maps);
     const startDateString = localDateString(windowStart);

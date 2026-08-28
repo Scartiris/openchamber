@@ -54,20 +54,35 @@ interface StatsState {
     error: string | null;
 }
 
+const TOKEN_STATS_CLIENT_TTL_MS = 10_000;
+const tokenStatsClientCache = new Map<string, { data: TokenStatsResponse; fetchedAt: number }>();
+
 export const useTokenStats = (range: TokenStatsRange, enabled: boolean): StatsState & { refresh: () => void } => {
-    const [state, setState] = useState<StatsState>({ data: null, loading: enabled, error: null });
+    const [state, setState] = useState<StatsState>(() => {
+        const cached = tokenStatsClientCache.get(range);
+        if (cached && Date.now() - cached.fetchedAt < TOKEN_STATS_CLIENT_TTL_MS) {
+            return { data: cached.data, loading: false, error: null };
+        }
+        return { data: cached?.data ?? null, loading: enabled, error: null };
+    });
     const [tick, setTick] = useState(0);
 
     const refresh = useCallback(() => setTick((value) => value + 1), []);
 
     useEffect(() => {
         if (!enabled) return;
+        const cached = tokenStatsClientCache.get(range);
+        // stale-while-revalidate: serve stale instantly (no state dep to avoid closure stale)
+        if (cached?.data) {
+            setState({ data: cached.data, loading: true, error: null });
+        } else {
+            setState((previous) => ({ ...previous, loading: true, error: null }));
+        }
         let cancelled = false;
         const controller = new AbortController();
         // First-ever collection of a long window can legitimately take a
         // while server-side; past that, fail visibly instead of hanging.
         const timeout = window.setTimeout(() => controller.abort(), 120_000);
-        setState((previous) => ({ ...previous, loading: true, error: null }));
         runtimeFetch(`/api/token-stats?days=${range}`, { signal: controller.signal })
             .then(async (response) => {
                 if (!response.ok) {
@@ -77,12 +92,15 @@ export const useTokenStats = (range: TokenStatsRange, enabled: boolean): StatsSt
                 return response.json() as Promise<TokenStatsResponse>;
             })
             .then((data) => {
-                if (!cancelled) setState({ data, loading: false, error: null });
+                if (cancelled) return;
+                tokenStatsClientCache.set(range, { data, fetchedAt: Date.now() });
+                setState({ data, loading: false, error: null });
             })
             .catch((error: unknown) => {
                 if (cancelled) return;
                 const message = error instanceof Error ? error.message : 'failed';
-                setState({ data: null, loading: false, error: message });
+                // keep stale data on error (SWR)
+                setState((previous) => ({ data: previous.data, loading: false, error: message }));
             });
         return () => {
             cancelled = true;
@@ -225,12 +243,19 @@ export const TokenUsageButton: React.FC<{ className?: string }> = ({ className }
     const [range, setRange] = useState<TokenStatsRange>('7');
     const [view, setView] = useState<'daily' | 'models'>('daily');
     // Poll while mounted so the titlebar figure stays fresh; the server caches
-    // for 30s so this stays cheap.
+    // for 10s so this stays cheap (SWR makes it instant).
     const stats = useTokenStats(range, true);
 
     useEffect(() => {
-        const timer = window.setInterval(() => stats.refresh(), 30_000);
-        return () => window.clearInterval(timer);
+        const timer = window.setInterval(() => stats.refresh(), 10_000);
+        const onVisible = () => {
+            if (document.visibilityState === 'visible') stats.refresh();
+        };
+        document.addEventListener('visibilitychange', onVisible);
+        return () => {
+            window.clearInterval(timer);
+            document.removeEventListener('visibilitychange', onVisible);
+        };
     }, [stats.refresh]);
 
     useEffect(() => {
