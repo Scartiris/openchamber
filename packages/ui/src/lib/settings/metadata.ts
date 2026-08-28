@@ -8,6 +8,7 @@ export type SettingsPageSlug =
   | 'remote-instances'
   | 'providers'
   | 'usage'
+  | 'pigeon'
   | 'agents'
   | 'behavior'
   | 'commands'
@@ -95,6 +96,13 @@ export const SETTINGS_PAGE_METADATA: readonly SettingsPageMeta[] = [
     group: 'general',
     kind: 'split',
     keywords: ['quota', 'billing', 'tokens', 'usage', 'limits'],
+  },
+  {
+    slug: 'pigeon',
+    title: 'Pigeon 记忆与知识库',
+    group: 'general',
+    kind: 'single',
+    keywords: ['pigeon', 'memory', 'knowledge', '记忆', '知识库', 'mem0', 'lightrag'],
   },
   {
     slug: 'agents',
@@ -293,6 +301,8 @@ export function getSettingsNavIcon(slug: SettingsPageSlug): IconName | null {
 
     case 'usage':
       return 'bar-chart-2';
+    case 'pigeon':
+      return 'plug';
     case 'voice':
       return 'mic';
     case 'tunnel':

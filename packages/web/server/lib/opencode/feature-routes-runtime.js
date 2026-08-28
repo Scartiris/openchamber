@@ -1,6 +1,7 @@
 import { registerFsRoutes } from '../fs/routes.js';
 import { registerQuotaRoutes } from '../quota/routes.js';
 import { registerUsageStatsRoutes } from '../usage-stats/routes.js';
+import { registerPigeonRoutes } from '../pigeon/routes.js';
 import { createUsageStatsService } from '../usage-stats/aggregator.js';
 import { registerSmallModelRoutes } from '../small-model/routes.js';
 import { registerWalkthroughRoutes } from '../walkthrough/routes.js';
@@ -308,6 +309,7 @@ export const createFeatureRoutesRuntime = (dependencies) => {
     registerUsageStatsRoutes(app, {
       getUsageStatsService: usageStatsService,
     });
+    registerPigeonRoutes(app);
     registerSmallModelRoutes(app, { getSmallModelService });
     registerWalkthroughRoutes(app, { getWalkthroughService });
     registerSessionGoalRoutes(app);

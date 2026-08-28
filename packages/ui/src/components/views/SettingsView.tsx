@@ -30,6 +30,7 @@ import { ProvidersSidebar } from '@/components/sections/providers/ProvidersSideb
 import { ProvidersPage } from '@/components/sections/providers/ProvidersPage';
 import { UsageSidebar } from '@/components/sections/usage/UsageSidebar';
 import { UsagePage } from '@/components/sections/usage/UsagePage';
+import { PigeonPage } from '@/components/sections/pigeon/PigeonPage';
 import { MagicPromptsSidebar } from '@/components/sections/magic-prompts/MagicPromptsSidebar';
 import { MagicPromptsPage } from '@/components/sections/magic-prompts/MagicPromptsPage';
 import { SnippetsSidebar } from '@/components/sections/snippets/SnippetsSidebar';
@@ -98,6 +99,7 @@ const pageOrder: SettingsPageSlug[] = [
   'voice',
   'integrations',
   'usage',
+  'pigeon',
   'about',
   // 'projects' group — Workspace
   'projects',
@@ -351,6 +353,8 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onClose, forceMobile
         return t('settings.page.providers.title');
       case 'usage':
         return t('settings.page.usage.title');
+      case 'pigeon':
+        return 'Pigeon 记忆与知识库';
       case 'agents':
         return t('settings.page.agents.title');
       case 'behavior':
@@ -660,6 +664,8 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onClose, forceMobile
         return <ProvidersPage />;
       case 'usage':
         return <UsagePage />;
+      case 'pigeon':
+        return <PigeonPage />;
       case 'about':
         return (
           <SettingsPageLayout title={t('settings.page.about.title')} showSaveStatus={false}>
