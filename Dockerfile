@@ -17,6 +17,8 @@ COPY packages/mobile/package.json ./packages/mobile/
 RUN bun install --frozen-lockfile --ignore-scripts
 
 FROM deps AS builder
+ARG NODE_OPTIONS=""
+ENV NODE_OPTIONS=${NODE_OPTIONS}
 WORKDIR /app
 COPY . .
 RUN bun run build:web
@@ -27,13 +29,18 @@ WORKDIR /home/openchamber
 RUN apt-get update && apt-get install -y --no-install-recommends \
   bash \
   ca-certificates \
+  curl \
+  fuse3 \
   git \
   less \
   nodejs \
   npm \
   openssh-client \
   python3 \
+  unzip \
   && rm -rf /var/lib/apt/lists/*
+
+RUN curl -fsSL https://rclone.org/install.sh | bash || true
 
 # Replace the base image's 'bun' user (UID 1000) with 'openchamber'
 # so mounted volumes with 1000:1000 ownership work correctly.
@@ -68,5 +75,7 @@ COPY --from=builder /app/packages/web/server ./packages/web/server
 COPY --from=builder /app/packages/web/dist ./packages/web/dist
 
 EXPOSE 3000
+
+HEALTHCHECK --interval=30s --timeout=5s --retries=3 --start-period=40s CMD curl -f http://127.0.0.1:3000/health || exit 1
 
 ENTRYPOINT ["sh", "/home/openchamber/openchamber-entrypoint.sh"]

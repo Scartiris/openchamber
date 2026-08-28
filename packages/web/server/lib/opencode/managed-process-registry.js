@@ -158,9 +158,8 @@ const commandIdentifiesOurServer = (command, entry) => {
   if (typeof command !== 'string') return false;
   const lower = command.toLowerCase();
   if (!lower.includes('opencode') || !lower.includes('serve')) return false;
-  // Tie to the exact server we registered when we know its port, so a recycled
-  // pid running a *different* opencode server is never mistaken for ours.
-  if (Number.isInteger(entry.port) && !command.includes(String(entry.port))) return false;
+  // 彻底修复：不再强绑定端口，避免孤儿因端口轮换漏杀（曾导致重启挂死）
+  // 仅保留 opencode+serve 特征，端口由 ppid/ownerGone 双重校验兜底
   return true;
 };
 

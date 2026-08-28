@@ -13,7 +13,7 @@ const parsePositiveInt = (value, fallback) => {
 const HEALTH_CHECK_TIMEOUT_MS = parsePositiveInt(process.env.OPENCHAMBER_OPENCODE_HEALTH_TIMEOUT_MS, 5000);
 const HEALTH_CHECK_MAX_CONSECUTIVE_FAILURES = parsePositiveInt(
   process.env.OPENCHAMBER_OPENCODE_HEALTH_CONSECUTIVE_FAILURES,
-  20
+  8
 );
 const HEALTH_CHECK_INTERVAL_OVERRIDE_MS = parsePositiveInt(process.env.OPENCHAMBER_OPENCODE_HEALTH_INTERVAL_MS, 0);
 const HEALTH_CHECK_RESULT_CACHE_MS = parsePositiveInt(process.env.OPENCHAMBER_OPENCODE_HEALTH_CACHE_MS, 750);
@@ -114,21 +114,30 @@ export const createOpenCodeLifecycleRuntime = (deps) => {
 
   const killProcessOnPort = (port) => {
     if (!port || process.platform === 'win32') return;
-    try {
-      const result = spawnSync('lsof', ['-ti', `:${port}`], { encoding: 'utf8', timeout: 5000, windowsHide: true });
-      const output = result.stdout || '';
+    const tryKill = (pids) => {
       const myPid = process.pid;
-      for (const pidStr of output.split(/\s+/)) {
+      for (const pidStr of String(pids || '').split(/\s+/)) {
         const pid = parseInt(pidStr.trim(), 10);
         if (pid && pid !== myPid) {
-          try {
-            spawnSync('kill', ['-9', String(pid)], { stdio: 'ignore', timeout: 2000 });
-          } catch {
-          }
+          try { spawnSync('kill', ['-9', String(pid)], { stdio: 'ignore', timeout: 2000 }); } catch {}
         }
       }
-    } catch {
-    }
+    };
+    try {
+      const r1 = spawnSync('lsof', ['-ti', `:${port}`], { encoding: 'utf8', timeout: 3000, windowsHide: true });
+      if (r1.stdout && r1.stdout.trim()) { tryKill(r1.stdout); return; }
+    } catch {}
+    try {
+      const r2 = spawnSync('fuser', [`${port}/tcp`], { encoding: 'utf8', timeout: 3000, windowsHide: true });
+      const out = (r2.stdout || '') + (r2.stderr || '');
+      const m = out.match(/\d+/g);
+      if (m) { tryKill(m.join(' ')); return; }
+    } catch {}
+    try {
+      const r3 = spawnSync('ss', ['-lptn', `sport = :${port}`], { encoding: 'utf8', timeout: 3000, windowsHide: true });
+      const out = r3.stdout || '';
+      for (const mm of out.matchAll(/pid=(\d+)/g)) tryKill(mm[1]);
+    } catch {}
   };
 
   const hasChildProcessExited = (child) => !child
@@ -1153,7 +1162,7 @@ export const createOpenCodeLifecycleRuntime = (deps) => {
    * Forces restart if sessions stay "busy" and the server stays unhealthy
    * for over 2 minutes (staleness guard against stuck session state).
    */
-  const STALE_BUSY_GRACE_MS = 2 * 60 * 1000;
+  const STALE_BUSY_GRACE_MS = 45 * 1000;
   let lastUnhealthyWithBusySessionsAt = 0;
   let consecutiveHealthFailures = 0;
   let lastCountedHealthFailureAt = 0;
@@ -1205,7 +1214,7 @@ export const createOpenCodeLifecycleRuntime = (deps) => {
 
     if (checkedAt - lastUnhealthyWithBusySessionsAt >= STALE_BUSY_GRACE_MS) {
       console.warn(
-        `[lifecycle] OpenCode unhealthy with ${activeCount} busy session(s) for > 2 min — forcing restart`
+        `[lifecycle] OpenCode unhealthy with ${activeCount} busy session(s) for > ${Math.round(STALE_BUSY_GRACE_MS/1000)}s — forcing restart`
       );
       lastUnhealthyWithBusySessionsAt = 0;
       return { skip: false, staleBusy: true };

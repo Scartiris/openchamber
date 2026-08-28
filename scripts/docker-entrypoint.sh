@@ -80,4 +80,21 @@ if [ -n "${OPENCHAMBER_UI_PASSWORD:-}" ]; then
 fi
 "$@"
 
+# [cloud-mount] 云盘挂载（rclone+openlist，幂等）
+if [ -f "${HOME}/apps/cloud-mount.sh" ]; then
+    if [ ! -f "${HOME}/.config/rclone/rclone.conf" ] && [ -f "${HOME}/.config/openchamber/rclone.conf" ]; then
+        mkdir -p "${HOME}/.config/rclone" && cp "${HOME}/.config/openchamber/rclone.conf" "${HOME}/.config/rclone/rclone.conf"
+    fi
+    if [ ! -f "${HOME}/.config/rclone/rclone.conf" ] && [ -f "${HOME}/apps/rclone.conf.bak" ]; then
+        mkdir -p "${HOME}/.config/rclone" && cp "${HOME}/apps/rclone.conf.bak" "${HOME}/.config/rclone/rclone.conf"
+    fi
+    setsid nohup bash "${HOME}/apps/cloud-mount.sh" >> "${HOME}/.config/openchamber/pigeon-data/cloud-mount.log" 2>&1 < /dev/null &
+    echo "[entrypoint] cloud-mount dispatched"
+fi
+# [pigeon-memory] 记忆服务 127.0.0.1:3210（未监听才拉起，幂等）
+if [ -f "${HOME}/.pigeon/server.js" ] && ! curl -sf --max-time 2 http://127.0.0.1:3210/health >/dev/null 2>&1; then
+    setsid nohup /usr/local/bin/bun "${HOME}/.pigeon/server.js" \
+        >> "${HOME}/.pigeon/server.log" 2>&1 < /dev/null &
+    echo "[entrypoint] pigeon-memory started on :3210"
+fi
 exec bun packages/web/bin/cli.js logs

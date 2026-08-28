@@ -344,7 +344,28 @@ async function restartCommand(options, serveCommand) {
           continue;
         }
 
-        await new Promise((resolve) => setTimeout(resolve, 500));
+        // 彻底修复：等待端口释放而非固定 500ms，避免重启竞态挂死
+        {
+          const waitForPort = async (port, timeoutMs = 8000) => {
+            const net = await import('node:net');
+            const deadline = Date.now() + timeoutMs;
+            const probe = () => new Promise((res) => {
+              const s = net.connect({ port, host: '127.0.0.1' });
+              let done = false;
+              const fin = (released) => {
+                if (done) return; done = true;
+                s.removeAllListeners(); s.destroy();
+                if (released || Date.now() >= deadline) res(released); else setTimeout(() => probe().then(res), 150);
+              };
+              s.once('connect', () => fin(false));
+              s.once('error', (e) => fin(e && (e.code === 'ECONNREFUSED' || e.code === 'EHOSTUNREACH')));
+              s.setTimeout(500, () => fin(true));
+            });
+            return probe();
+          };
+          const released = await waitForPort(restartPort, 8000);
+          if (!released) console.warn(`[restart] port ${restartPort} not released after 8000ms, continuing anyway`);
+        }
 
         const restartedPort = await runServe({
           port: restartPort,
