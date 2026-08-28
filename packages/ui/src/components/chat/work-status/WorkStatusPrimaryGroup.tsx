@@ -23,6 +23,7 @@ import {
   WorkStatusValue,
 } from './WorkStatusPrimitives';
 import { useReportWorkStatusPresence } from './presenceContext';
+import { useSessionOutputRate } from '@/hooks/useSessionOutputRate';
 
 type Props = {
   sessionId: string | null;
@@ -50,6 +51,7 @@ const formatPercent = (percent: number): string => `${Math.min(percent, 999).toF
 export const WorkStatusPrimaryGroup: React.FC<Props> = ({ sessionId, directory, goalRow, showSession, showRepository }) => {
   const { t } = useI18n();
   const session = useSession(sessionId ?? '', directory ?? undefined);
+  const outputRate = useSessionOutputRate(sessionId ?? '', directory ?? null);
   const { git } = useRuntimeAPIs();
   const ensureStatus = useGitStore((state) => state.ensureStatus);
   const fetchStatus = useGitStore((state) => state.fetchStatus);
@@ -228,6 +230,28 @@ export const WorkStatusPrimaryGroup: React.FC<Props> = ({ sessionId, directory, 
           ) : null}
           {/* Below the context readout: the goal is a standing instruction,
               while context is the live number the reader came for. */}
+          {(() => {
+            // 常驻显示：instant only ticks while streaming (dash when idle),
+            // the average keeps the last turn's result until the next turn.
+            const streaming = outputRate.isStreaming;
+            const instant = outputRate.instantTokensPerSec;
+            const fmt = (v: number | null): string =>
+              v !== null && Number.isFinite(v) && v > 0
+                ? (v >= 100 ? String(Math.round(v)) : v.toFixed(1)) + ' tok/s'
+                : '\u2014';
+            return (
+              <>
+                <WorkStatusRow
+                  label={t('chat.workStatus.rate.instant')}
+                  value={<WorkStatusValue tone={streaming ? 'default' : 'muted'}>{fmt(streaming ? instant : null)}</WorkStatusValue>}
+                />
+                <WorkStatusRow
+                  label={t('chat.workStatus.rate.avg')}
+                  value={<WorkStatusValue tone={streaming ? 'default' : 'muted'}>{fmt(outputRate.avgTokensPerSec)}</WorkStatusValue>}
+                />
+              </>
+            );
+          })()}
           {goalRow}
         </WorkStatusSection>
       ) : null}

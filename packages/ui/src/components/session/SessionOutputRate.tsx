@@ -12,7 +12,10 @@ const formatRate = (v: number | null): string => {
 
 /**
  * Single-column rate for sidebar row.
- * - Only renders when streaming; idle returns null (hidden)
+ * - While streaming: instant rate (falls back to turn average while the
+ *   instant window is warming up or the provider is bursty)
+ * - After the turn: keeps showing the last average in a muted tone (常驻显示)
+ * - Hidden only when there is no data at all
  * - Isolated ticker: parent row does not re-render on every tick beyond this leaf
  */
 export const SessionOutputRate: React.FC<{
@@ -22,15 +25,15 @@ export const SessionOutputRate: React.FC<{
 }> = ({ sessionId, directory, className }) => {
   const { t } = useI18n();
   const rate = useSessionOutputRate(sessionId, directory ?? null);
-  if (!rate.isStreaming) return null;
-  // prefer instant, fallback to avg while window warming
-  const value = rate.instantTokensPerSec ?? rate.avgTokensPerSec;
+  const instant = rate.instantTokensPerSec;
+  const value = rate.isStreaming && instant !== null && instant > 0 ? instant : rate.avgTokensPerSec;
   if (value === null || value <= 0) return null;
+  const live = rate.isStreaming;
   const label = `${formatRate(value)} tok/s`;
-  const hint = rate.charsPerSec !== null ? `${Math.round(rate.charsPerSec)} chars/s${rate.isEstimate ? ' ~' : ''}` : rate.isEstimate ? t('contextSidebar.rate.estimating') : '';
+  const hint = rate.charsPerSec !== null && live ? `${Math.round(rate.charsPerSec)} chars/s${rate.isEstimate ? ' ~' : ''}` : rate.isEstimate ? t('contextSidebar.rate.estimating') : '';
   return (
     <span
-      className={cn('shrink-0 tabular-nums', 'text-[0.72rem] text-primary', className)}
+      className={cn('shrink-0 tabular-nums text-[0.72rem]', live ? 'text-primary' : 'text-muted-foreground/60', className)}
       aria-label={label}
       title={hint || label}
     >
@@ -38,5 +41,3 @@ export const SessionOutputRate: React.FC<{
     </span>
   );
 };
-
-
