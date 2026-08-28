@@ -1,7 +1,6 @@
 # syntax=docker/dockerfile:1
-# NOTE: pigeon production images MUST be built via GHCR workflow
-# (.github/workflows/docker.yml), never via `docker commit`.
-# The 6.7 GB commit layer on old pigeon images is the reason for bloat.
+# Pigeon production images are built by .github/workflows/docker.yml.
+# Do not use docker commit: runtime state belongs in persistent mounts.
 FROM oven/bun:1.3.14 AS base
 WORKDIR /app
 
@@ -38,6 +37,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
   openssh-client \
   python3 \
   unzip \
+  util-linux \
   && rm -rf /var/lib/apt/lists/*
 
 RUN curl -fsSL https://rclone.org/install.sh | bash || true
@@ -49,9 +49,7 @@ RUN userdel bun \
   && useradd -u 1000 -g 1000 -m -s /bin/bash openchamber \
   && chown -R openchamber:openchamber /home/openchamber
 
-# Switch to openchamber user
 USER openchamber
-
 ENV NPM_CONFIG_PREFIX=/home/openchamber/.npm-global
 ENV PATH=${NPM_CONFIG_PREFIX}/bin:${PATH}
 
@@ -59,13 +57,10 @@ RUN npm config set prefix /home/openchamber/.npm-global && mkdir -p /home/opench
   mkdir -p /home/openchamber/.local /home/openchamber/.config /home/openchamber/.ssh && \
   npm install -g opencode-ai
 
-# cloudflared 2026.3.0 - update digest explicitly when upgrading
 COPY --from=cloudflare/cloudflared@sha256:6d91c121b803126f7a5344005d17a9324788fc09d305b6e2560ec6040a7ae283 /usr/local/bin/cloudflared /usr/local/bin/cloudflared
 
 ENV NODE_ENV=production
-
 COPY scripts/docker-entrypoint.sh /home/openchamber/openchamber-entrypoint.sh
-
 COPY --from=deps /app/node_modules ./node_modules
 COPY --from=deps /app/packages/web/node_modules ./packages/web/node_modules
 COPY --from=builder /app/package.json ./package.json

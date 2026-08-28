@@ -1,70 +1,42 @@
 # Pigeon 发版与并行协作
 
-> 适用于宿主机 `pigeon`（Debian 13, Docker 29.1.3）上的 `openchamber` 容器。
+生产镜像只从 `custom` 分支的 GitHub Actions 构建并推送到 GHCR；运行容器不再构建、提交或重启自己。
 
-## 发版流（CI 出镜像 → 服务器拉）
-
-```
-本地 worktree 修改 → merge 到 custom → push origin custom
-                 → GitHub Actions .github/workflows/docker.yml
-                 → ghcr.io/scartiris/openchamber:custom / :custom-<sha>
-                 → 宿主机: ./scripts/pigeon-deploy.sh pull custom && ./scripts/pigeon-deploy.sh switch custom-<sha>
-```
-
-打版本时：
+## 并行修改
 
 ```bash
-node scripts/bump-version.mjs 1.20.107   # 同步 5 个 package.json
-git add -A && git commit -m "release: v1.20.107"
+./scripts/pigeon-worktree.sh new <task>
+# 在 ~/worktrees/<task> 修改、验证、提交
+cd /root/projects/openchamber-release
+git merge --no-ff feat/<task>
 git push origin custom
-git tag v1.20.107 && git push origin v1.20.107   # 产出 ghcr.io/scartiris/openchamber:1.20.107
-# 宿主机切版本
-./scripts/pigeon-deploy.sh switch 1.20.107
 ```
 
-`release.yml`（Electron）与 `docker.yml` 互不干扰；后者 `permissions: packages: write` 负责推送 GHCR。
+`custom` 的每次推送产出 `ghcr.io/scartiris/openchamber:custom` 与不可变的 `custom-<sha>` 标签；版本标签 `v1.20.x` 额外产出 `1.20.x`。
 
-## 服务器操作
+## 宿主机部署
 
-在宿主机 `/root/projects/openchamber` 执行：
+将已验证的 `scripts/pigeon-deploy.sh` 安装到 `/root/projects/openchamber/scripts/` 后，仅在宿主机运行：
 
 ```bash
-./scripts/pigeon-deploy.sh status            # 看当前镜像/历史
-./scripts/pigeon-deploy.sh pull custom       # 拉最新 custom
-./scripts/pigeon-deploy.sh switch 1.20.107   # 切到版本（自动改 docker-compose.pigeon.yaml 的 image + pull_policy）
-./scripts/pigeon-deploy.sh rollback          # 回到上一版本
-./scripts/pigeon-deploy.sh login             # 私有包时用 GHCR_TOKEN 登录
+./scripts/pigeon-deploy.sh status
+./scripts/pigeon-deploy.sh pull custom-<sha>
+./scripts/pigeon-deploy.sh switch custom-<sha>
+./scripts/pigeon-deploy.sh rollback
 ```
 
-- 镜像以 `ghcr.io/scartiris/openchamber` 为前缀，`pull_policy: always`（`pigeon-deploy.sh switch` 自动切换）。
-- 切换会备份 `docker-compose.pigeon.yaml.bak.<ts>` 并等待 `http://127.0.0.1:3000/health` 最多 60s，失败自动回滚。
-- 保留最近 20 条 `.deploy-history`，`rollback` 取倒数第二条。
+脚本显式拉取镜像、将 Compose 保持为 `pull_policy: never`，并通过 `openchamber-container.service` 完成重启。它会验证主站、记忆、节点网格与 OpenList 四个健康端点；任一失败即恢复原 Compose 文件和原镜像。
 
-## 并行隔离（worktree）
+不要从容器内运行部署脚本。容器内只允许代码提交和 `git push`；切换由宿主机 systemd 接管，因此不会杀死发版会话。
 
-```bash
-./scripts/pigeon-worktree.sh new tts-fix          # 创建 ~/worktrees/tts-fix (branch feat/tts-fix from custom)
-./scripts/pigeon-worktree.sh ls
-# ... 在 ~/worktrees/tts-fix 里改代码、提交 ...
-cd ~/openchamber-fork
-git merge --no-ff feat/tts-fix && git push origin custom   # 触发 GHCR 构建
-./scripts/pigeon-worktree.sh rm tts-fix           # 清理 worktree（检查未提交）
+## 持久化运行时
+
+宿主机 Compose 必须保留以下绑定挂载：
+
+```yaml
+- ./data/openchamber/pigeon-data:/home/openchamber/.pigeon
+- ./data/pigeon-runtime/node-mesh:/home/openchamber/node-mesh
+- ./data/pigeon-runtime/apps:/home/openchamber/apps
 ```
 
-规则：`~/openchamber-fork` 常驻 `custom` 且保持干净；所有功能在 worktree 分支完成。
-
-## 镜像瘦身
-
-- 旧 `pigeon-openchamber:pre-repair/token-refresh` 为 `docker commit` 产物，顶层 6.7GB 无指令层导致 13.7GB。后续一律 `docker build`，预期 4.3–5GB（与官方 `openchamber-openchamber:latest` 对齐）。
-- `.dockerignore` 已排除 `packages/web.bak-*`, `workspaces`, `data` 等。
-- `Dockerfile` 首行注明禁止 `commit`。
-
-## 旧备份
-
-- 容器内 `~/packages/web.bak-*`（5 个）为历史手工备份，首个 GHCR 版本验证通过后删除，保留 git tag 回滚。
-- 宿主机 `/root/backups/openchamber/20260826-095900-pre-repair/persistent-volumes.tar.gz` 为全量卷备份，保留至 1.20.107 稳定运行后归档。
-
-## 常见问题
-
-- **GHCR 私有拉取 401**：宿主机 `export GHCR_TOKEN=ghp_xxx && ./scripts/pigeon-deploy.sh login`，token 需 `read:packages`。
-- **自己更新自己**：不要在容器内执行 `docker compose up -d`；只 `git push`，切换在宿主机执行。
+记忆服务的数据和代码位于第一个目录；镜像入口会在容器启动时拉起它。卷快照应在每次切流前保留，旧镜像只在新版本稳定验证后再清理。
